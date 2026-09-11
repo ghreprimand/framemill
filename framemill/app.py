@@ -160,6 +160,11 @@ def main(page: ft.Page) -> None:
             model_label.value = files[0].name
             model_label.color = TEXT
             page.update()
+            # Auto-render a quick front-facing preview so the user sees their
+            # starting point immediately, without rendering the whole sheet.
+            if st.blender_path and not st.rendering:
+                set_status(f"Loaded {files[0].name} — rendering preview…")
+                page.run_thread(_do_render, True)
 
     async def pick_idle(e) -> None:
         files = await idle_picker.pick_files(allow_multiple=False, allowed_extensions=_EXT)
