@@ -67,9 +67,11 @@ WORKFLOW_STEPS: list[Step] = [
         "4 · Export and configure your game",
         "Export sprite sheet opens a processed output preview. Use matching "
         "dimensions, orientation and framing for related sheets, and check "
-        "their anchors: each source is framed independently. Your game chooses "
-        "which sheet/frames to play, their speed, and whether to loop. "
-        "Framemill exports images, not animation-state or timing metadata.",
+        "their anchors. Use fixed world scale, the same feet/centre anchor and "
+        "output offsets so related clips match. Your game still chooses which "
+        "sheet to play. Optionally export a JSON sidecar with layout, sample "
+        "times, playback FPS, loop mode and pivot; the image itself does not "
+        "encode those rules.",
     ),
 ]
 
@@ -86,25 +88,28 @@ ANIMATION_STEPS: list[Step] = [
     Step(
         "How frames are sampled",
         "Framemill uses the range of the first active action found on an "
-        "imported object, or the scene range if none is found. It samples "
-        "evenly, including fractional times. Eleven frames is valid. It does "
-        "not detect a stride, select among clips, or repair loop boundaries. "
-        "Prepare one intended animation per source file.",
+        "imported object, or the scene range if none is found. The detected "
+        "action, start, end and source FPS appear after you load a model. "
+        "Start/end fields trim that range. It samples evenly, including "
+        "fractional times. Eleven frames is valid. It does not detect a stride "
+        "or pick among NLA/multiple clips. Prepare one intended animation per "
+        "source file.",
     ),
     Step(
-        "Looping assumption / one-shot actions",
-        "The final source endpoint is excluded, assuming it repeats the "
-        "starting pose. Phase wraps within that range; reverse changes its "
-        "traversal. Attacks, jumps and deaths can render, but may lose their "
-        "exact final pose, and preview playback loops them. There is no "
-        "one-shot/include-end mode or source-range editor in the UI yet. "
-        "Trim the source in your animation tool before export.",
+        "Loop vs one-shot",
+        "Loop keeps the walk-cycle behaviour: the final source endpoint is "
+        "excluded and phase wraps inside that range. Reverse wraps too. "
+        "One-shot includes both endpoints when there are two or more frames, "
+        "ignores phase, reverses without wrapping, and stops preview playback "
+        "on the last frame. A single one-shot frame is the start pose, or the "
+        "end pose if reverse is on. A single loop frame is start + phase × span.",
     ),
     Step(
         "Preview speed is not export timing",
         "The FPS control changes viewer playback only. Frame count changes "
         "how densely the source is sampled. Set the intended animation speed "
-        "separately in your game engine.",
+        "separately in your game engine, or write it into the optional metadata "
+        "sidecar as playback_fps (distinct from source_fps).",
     ),
     Step(
         "First-frame replacement is a compatibility option",
@@ -127,17 +132,29 @@ ANIMATION_STEPS: list[Step] = [
 TROUBLESHOOTING_STEPS: list[Step] = [
     Step(
         "Model faces the wrong way",
-        "South assumes the source already faces the front camera. Sheet order "
-        "does not realign the mesh, and preview facing buttons only change the "
-        "view. Correct source orientation in your modelling tool before export.",
+        "South is the front camera. Sheet order and preview facing do not "
+        "rotate the mesh. Use Source facing → Left/Right 90° or the yaw field "
+        "to correct the imported source (animation included) without changing "
+        "sheet order. Up-axis correction and free 3D orbit are not provided.",
     ),
     Step(
         "Drifting, small or clipped sprites",
         "Framemill does not remove root motion. Prepare an in-place animation "
-        "when the game moves the actor. Increase Camera → Framing to make the "
-        "sprite smaller, then render again and check all directions and extreme "
-        "poses. Viewer pan/zoom does not change the exported crop. Separate "
-        "animation files are framed independently.",
+        "when the game moves the actor. For matching walk/idle/attack sheets, "
+        "switch Camera to Fixed world scale and set the same world-unit origin "
+        "(do not rely on each clip's bounds). Output X/Y offsets are finished "
+        "cell pixels: +X right, +Y down. Fit mode still sizes each clip from "
+        "its own bounds. Increase the fit multiplier or fixed scale to make "
+        "the sprite smaller. Viewer pan/zoom does not change the crop.",
+    ),
+    Step(
+        "Recipes, validation and size limits",
+        "Save recipe writes a versioned JSON file with relative source paths, "
+        "render settings and export config. Load it from the desktop picker or "
+        "an absolute path in the browser preview. Invalid frames, inverted "
+        "ranges and oversized sheets (too many pixels of RGBA) are rejected "
+        "before render. The CLI also rejects zero/negative --frames and "
+        "unknown --format values.",
     ),
     Step(
         "Camera and output size",

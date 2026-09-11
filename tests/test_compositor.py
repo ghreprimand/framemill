@@ -71,6 +71,17 @@ def test_north_clockwise_sheet_uses_compass_order(tmp_path: Path, axis: str) -> 
         assert sheet.getpixel(xy)[0] == i * 20
 
 
+def test_output_offset_shifts_cell_without_changing_sheet_size(tmp_path: Path):
+    s = RenderSettings(angles=1, frames=1, frame_width=8, frame_height=8,
+                       output_offset_x=2, output_offset_y=-1)
+    name = s.direction_layout()[0][0]
+    Image.new("RGBA", (8, 8), (20, 40, 80, 255)).save(tmp_path / f"{name}_00.png")
+    sheet = build_sheet(tmp_path, s)
+    assert sheet.size == (8, 8)
+    assert sheet.getpixel((0, 4))[3] == 0
+    assert sheet.getpixel((3, 3))[:3] == (20, 40, 80)
+
+
 @pytest.mark.parametrize("angles,start", [(8, "S"), (8, "N"), (4, "E"), (1, "S")])
 def test_preview_reads_actual_first_direction(tmp_path, angles, start):
     from framemill.compositor import build_preview

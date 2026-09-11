@@ -6,7 +6,8 @@ with defaults chosen to match the most common top-down/isometric setup.
 """
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+import math
+from dataclasses import asdict, dataclass, fields
 
 # Canonical counter-clockwise character facings and their camera azimuths.
 # Preserve name-to-camera mappings: orbiting the camera and turning the
@@ -17,6 +18,19 @@ _RINGS = {
     16: ["S", "SSE", "SE", "ESE", "E", "ENE", "NE", "NNE",
          "N", "NNW", "NW", "WNW", "W", "WSW", "SW", "SSW"],
 }
+
+VALID_ANGLES = (1, 4, 8, 16)
+VALID_LOOP_MODES = ("loop", "oneshot")
+VALID_FRAMING_MODES = ("fit", "fixed")
+VALID_ANCHORS = ("center", "feet")
+MAX_FRAMES = 64
+MAX_CELL = 1024
+MIN_RENDER = 16
+MAX_RENDER = 8192
+# Sheet RGBA budget (~256 MiB). Individual dimensions can still pass on their own.
+MAX_SHEET_PIXELS = 64_000_000
+# Limit each sequential render buffer, independently of animation length.
+MAX_RENDER_PIXELS = 16_000_000
 
 
 def _angle_for(count: int, index: int) -> float:
@@ -50,6 +64,89 @@ def build_layout(angles: int, start: str = "S", rotation: str = "cw") -> list[tu
     return [(name, _ANGLES[angles][name]) for name in order]
 
 
+def sample_source_times(
+    start: float,
+    end: float,
+    frames: int,
+    *,
+    loop_mode: str = "loop",
+    phase_offset: float = 0.0,
+    reverse: bool = False,
+) -> list[float]:
+    """Source times for each output frame.
+
+    Loop keeps the historical wrap: ``start + (i / frames + phase) * (end - start)``,
+    so the final endpoint is excluded (the usual walk-cycle case). Reverse wraps.
+
+    One-shot includes both endpoints when ``frames >= 2``, ignores phase, and
+    reverses without wrapping. A single one-shot frame is the start pose, or the
+    end pose when reverse is set. A single loop frame is ``start + phase * length``.
+    """
+    length = float(end) - float(start)
+    count = max(int(frames), 1)
+    mode = loop_mode if loop_mode in VALID_LOOP_MODES else "loop"
+    if length == 0:
+        return [float(start)] * count
+    times: list[float] = []
+    for fi in range(count):
+        if mode == "oneshot":
+            frac = 0.0 if count == 1 else fi / (count - 1)
+            if reverse:
+                frac = 1.0 - frac
+        else:
+            frac = (fi / count) + float(phase_offset or 0.0)
+            frac %= 1.0
+            if reverse:
+                frac = (1.0 - frac) % 1.0
+        times.append(float(start) + frac * length)
+    return times
+
+
+def next_playback_frame(frame: int, frames: int, loop_mode: str) -> int | None:
+    """Advance the viewer. ``None`` means a one-shot clip has finished."""
+    count = max(int(frames), 1)
+    nxt = int(frame) + 1
+    if loop_mode == "oneshot":
+        return nxt if nxt < count else None
+    return nxt % count
+
+
+def resolved_anim_range(
+    settings: RenderSettings,
+    detected_start: int | None,
+    detected_end: int | None,
+) -> tuple[int | None, int | None]:
+    start = settings.anim_start_override if settings.anim_start_override is not None else detected_start
+    end = settings.anim_end_override if settings.anim_end_override is not None else detected_end
+    return start, end
+
+
+def framing_ortho_scale(settings: RenderSettings, height: float) -> float:
+    """World-unit orthographic scale. Fixed mode ignores per-clip height."""
+    if settings.framing_mode == "fixed" and settings.framing_scale > 0:
+        return float(settings.framing_scale)
+    return max(float(height), 1e-3) * float(settings.ortho_scale_mult)
+
+
+def framing_target(
+    center: tuple[float, float, float],
+    size: tuple[float, float, float],
+    settings: RenderSettings,
+) -> tuple[float, float, float]:
+    """Camera look-at in world units.
+
+    Fixed mode uses the explicit origin so related clips do not shift when
+    their bounds change. Fit mode may use clip-bounds centre or lowest Z.
+    Never recenters per frame.
+    """
+    if settings.framing_mode == "fixed":
+        return (float(settings.framing_origin_x), float(settings.framing_origin_y),
+                float(settings.framing_origin_z))
+    if settings.anchor == "feet":
+        return (center[0], center[1], center[2] - size[2] / 2.0)
+    return (center[0], center[1], center[2])
+
+
 @dataclass
 class RenderSettings:
     # --- Output geometry ---
@@ -68,8 +165,22 @@ class RenderSettings:
     layout_axis: str = "rows"       # rows = directions down / frames across; cols = transpose
 
     # --- Animation timing ---
-    phase_offset: float = 0.0       # 0..1, shifts which pose is frame 0
+    phase_offset: float = 0.0       # 0..1, shifts which pose is frame 0 (loop only)
     reverse: bool = False           # play the cycle backwards
+    loop_mode: str = "loop"         # loop | oneshot
+
+    # --- Source orientation (independent of sheet order and preview facing) ---
+    source_yaw: float = 0.0         # degrees around world Z after import
+
+    # --- Shared framing (locked scale / anchor for related clips) ---
+    framing_mode: str = "fit"       # fit | fixed
+    framing_scale: float = 2.0      # world-unit ortho scale when framing_mode is fixed
+    framing_origin_x: float = 0.0   # world-unit look-at; used only in fixed mode
+    framing_origin_y: float = 0.0
+    framing_origin_z: float = 0.0
+    anchor: str = "center"          # center | feet (fit mode); fixed mode uses origin
+    output_offset_x: int = 0        # finished-cell pixels; +X right, +Y down
+    output_offset_y: int = 0
 
     # --- Camera ---
     ortho_scale_mult: float = 1.8
@@ -107,12 +218,145 @@ class RenderSettings:
         return asdict(self)
 
     @classmethod
-    def from_dict(cls, data: dict) -> RenderSettings:
-        known = set(cls.__dataclass_fields__)  # type: ignore[attr-defined]
-        return cls(**{k: v for k, v in data.items() if k in known})
+    def from_dict(cls, data: dict, *, strict: bool = False) -> RenderSettings:
+        settings, warnings = cls.from_dict_recovering(data)
+        if strict:
+            if warnings:
+                raise ValueError(" ".join(warnings))
+            settings.validate()
+        return settings
+
+    @classmethod
+    def from_dict_recovering(cls, data: dict) -> tuple[RenderSettings, list[str]]:
+        """Lenient persist load: bad values fall back to defaults with messages."""
+        warnings: list[str] = []
+        if not isinstance(data, dict):
+            return cls(), ["Saved render settings were not an object; using defaults."]
+        known = {f.name for f in fields(cls)}
+        proto = cls()
+        kwargs: dict = {}
+        for key, value in data.items():
+            if key not in known:
+                warnings.append(f"Ignored unknown setting {key!r}.")
+                continue
+            default = getattr(proto, key)
+            try:
+                kwargs[key] = _coerce_setting(default, value)
+            except (TypeError, ValueError) as exc:
+                warnings.append(f"Invalid {key} ({exc}); using default {default!r}.")
+        settings = cls(**kwargs)
+        try:
+            settings.validate()
+        except ValueError as exc:
+            warnings.append(f"{exc} Restored default render settings.")
+            return cls(), warnings
+        return settings, warnings
 
     def direction_layout(self) -> list[tuple[str, float]]:
         return build_layout(self.angles, self.start_direction, self.rotation)
+
+    def sheet_size(self) -> tuple[int, int]:
+        w, h = int(self.frame_width), int(self.frame_height)
+        if self.layout_axis == "cols":
+            return w * int(self.angles), h * int(self.frames)
+        return w * int(self.frames), h * int(self.angles)
+
+    def sheet_pixels(self) -> int:
+        sw, sh = self.sheet_size()
+        return max(sw, 0) * max(sh, 0)
+
+    def render_pixels(self) -> int:
+        return (max(int(self.render_width), 0) * max(int(self.render_height), 0)
+                )
+
+    def estimated_sheet_bytes(self) -> int:
+        return self.sheet_pixels() * 4
+
+    def sample_times(self, start: float, end: float) -> list[float]:
+        phase = 0.0 if self.loop_mode == "oneshot" else self.phase_offset
+        return sample_source_times(
+            start, end, self.frames,
+            loop_mode=self.loop_mode, phase_offset=phase, reverse=self.reverse,
+        )
+
+    def validate(self) -> None:
+        problems: list[str] = []
+        defaults = RenderSettings()
+        for field in fields(self):
+            value, default = getattr(self, field.name), getattr(defaults, field.name)
+            valid = True
+            if default is None:
+                valid = value is None or type(value) is int
+            elif type(default) is bool:
+                valid = type(value) is bool
+            elif type(default) is int:
+                valid = type(value) is int
+            elif type(default) is float:
+                valid = type(value) in (int, float) and math.isfinite(value)
+            elif type(default) is str:
+                valid = isinstance(value, str)
+            if not valid:
+                problems.append(f"Invalid type or non-finite value for {field.name}.")
+        if problems:
+            raise ValueError(" ".join(problems))
+        for name in ("ortho_scale_mult", "camera_distance", "gamma", "framing_scale"):
+            if getattr(self, name) <= 0:
+                problems.append(f"{name} must be greater than zero.")
+        for name in ("anim_start_override", "anim_end_override", "idle_frame_index"):
+            value = getattr(self, name)
+            if value is not None and abs(value) > 1_000_000:
+                problems.append(f"{name} must be within -1000000 to 1000000.")
+        if self.angles > 1 and self.start_direction not in _RINGS.get(self.angles, []):
+            problems.append("Start direction must be one of the selected directions.")
+        if not 0 <= self.phase_offset <= 1:
+            problems.append("Phase must be between 0 and 1.")
+        if (self.anim_start_override is not None and self.anim_end_override is not None
+                and self.anim_end_override - self.anim_start_override > 10000):
+            problems.append("Source range must span at most 10000 frames.")
+        if self.angles not in VALID_ANGLES:
+            problems.append("Directions must be 1, 4, 8 or 16.")
+        if not 1 <= int(self.frames) <= MAX_FRAMES:
+            problems.append(f"Frames must be between 1 and {MAX_FRAMES}.")
+        if not 1 <= int(self.frame_width) <= MAX_CELL:
+            problems.append(f"Sprite width must be between 1 and {MAX_CELL}.")
+        if not 1 <= int(self.frame_height) <= MAX_CELL:
+            problems.append(f"Sprite height must be between 1 and {MAX_CELL}.")
+        if not MIN_RENDER <= int(self.render_width) <= MAX_RENDER:
+            problems.append(f"Render width must be between {MIN_RENDER} and {MAX_RENDER}.")
+        if not MIN_RENDER <= int(self.render_height) <= MAX_RENDER:
+            problems.append(f"Render height must be between {MIN_RENDER} and {MAX_RENDER}.")
+        if self.loop_mode not in VALID_LOOP_MODES:
+            problems.append("Loop mode must be 'loop' or 'oneshot'.")
+        if self.framing_mode not in VALID_FRAMING_MODES:
+            problems.append("Framing mode must be 'fit' or 'fixed'.")
+        if self.anchor not in VALID_ANCHORS:
+            problems.append("Anchor must be 'center' or 'feet'.")
+        if self.layout_axis not in ("rows", "cols"):
+            problems.append("Sheet layout must be 'rows' or 'cols'.")
+        if self.rotation not in ("cw", "ccw"):
+            problems.append("Rotation must be 'cw' or 'ccw'.")
+        if (self.anim_start_override is not None and self.anim_end_override is not None
+                and int(self.anim_start_override) > int(self.anim_end_override)):
+            problems.append("Source start must be at or before source end.")
+        if self.framing_mode == "fixed" and float(self.framing_scale) <= 0:
+            problems.append("Fixed framing needs a world scale greater than 0.")
+        pixels = self.sheet_pixels()
+        if pixels > MAX_SHEET_PIXELS:
+            sw, sh = self.sheet_size()
+            problems.append(
+                f"Sheet would be {sw}×{sh} ({pixels:,} pixels, "
+                f"~{self.estimated_sheet_bytes() / (1024 ** 2):.0f} MiB RGBA). "
+                f"Reduce size, frames or directions (limit {MAX_SHEET_PIXELS:,} pixels)."
+            )
+        rendered = self.render_pixels()
+        if rendered > MAX_RENDER_PIXELS:
+            problems.append(
+                f"Each render would be {rendered:,} pixels. "
+                f"Reduce render resolution "
+                f"(limit {MAX_RENDER_PIXELS:,} pixels)."
+            )
+        if problems:
+            raise ValueError(" ".join(problems))
 
     def render_config(self) -> dict:
         """Config handed to the Blender-side script: settings + explicit layout,
@@ -120,6 +364,43 @@ class RenderSettings:
         d = self.to_dict()
         d["_layout"] = [[name, angle] for name, angle in self.direction_layout()]
         return d
+
+
+def _coerce_setting(default, value):
+    if value is None:
+        if default is None:
+            return None
+        raise ValueError("expected a value")
+    if isinstance(default, bool):
+        if isinstance(value, bool):
+            return value
+        raise ValueError("expected true or false")
+    if isinstance(default, int) and not isinstance(default, bool):
+        if isinstance(value, bool):
+            raise ValueError("expected a number, not true/false")  # noqa: TRY004
+        if isinstance(value, float) and not math.isfinite(value):
+            raise ValueError("expected a finite number")
+        if isinstance(value, str) and value.strip() == "":
+            raise ValueError("expected a number")
+        if isinstance(value, float) and not value.is_integer():
+            raise ValueError("expected a whole number")
+        return int(value)
+    if isinstance(default, float):
+        if isinstance(value, bool):
+            raise ValueError("expected a number, not true/false")  # noqa: TRY004
+        number = float(value)
+        if not math.isfinite(number):
+            raise ValueError("expected a finite number")
+        return number
+    if isinstance(default, str):
+        if not isinstance(value, str):
+            raise ValueError("expected text")  # noqa: TRY004
+        return value
+    if default is None:
+        if isinstance(value, bool):
+            raise ValueError("expected a number, not true/false")
+        return _coerce_setting(0, value)
+    return value
 
 
 @dataclass

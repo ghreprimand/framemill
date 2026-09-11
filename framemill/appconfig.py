@@ -24,8 +24,9 @@ CONFIG_PATH = _config_dir() / "config.json"
 
 def load() -> dict:
     try:
-        return json.loads(CONFIG_PATH.read_text())
-    except (FileNotFoundError, json.JSONDecodeError):
+        data = json.loads(CONFIG_PATH.read_text())
+        return data if isinstance(data, dict) else {}
+    except (OSError, json.JSONDecodeError):
         return {}
 
 

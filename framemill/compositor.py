@@ -30,13 +30,27 @@ def _crop_to_aspect(img: Image.Image, target_w: int, target_h: int) -> Image.Ima
     return img.crop((x, y, x + crop_w, y + crop_h))
 
 
+def apply_output_offset(img: Image.Image, offset_x: int, offset_y: int) -> Image.Image:
+    """Shift the finished cell without changing its size (transparent pad)."""
+    ox, oy = int(offset_x or 0), int(offset_y or 0)
+    if ox == 0 and oy == 0:
+        return img
+    canvas = Image.new("RGBA", img.size, (0, 0, 0, 0))
+    canvas.paste(img, (ox, oy))
+    return canvas
+
+
+def _fit_cell(img: Image.Image, settings: RenderSettings) -> Image.Image:
+    fw, fh = settings.frame_width, settings.frame_height
+    fitted = _crop_to_aspect(img.convert("RGBA"), fw, fh).resize((fw, fh), Image.Resampling.LANCZOS)
+    return apply_output_offset(fitted, settings.output_offset_x, settings.output_offset_y)
+
+
 def build_preview(frames_dir: Path, settings: RenderSettings) -> Image.Image:
     """Read the first rendered direction without changing its filename/layout."""
     name = settings.direction_layout()[0][0]
     with Image.open(frames_dir / f"{name}_00.png") as source:
-        return _crop_to_aspect(source.convert("RGBA"), settings.frame_width,
-                               settings.frame_height).resize(
-            (settings.frame_width, settings.frame_height), Image.Resampling.LANCZOS)
+        return _fit_cell(source, settings)
 
 
 def build_sheet(frames_dir: Path, settings: RenderSettings,
@@ -68,8 +82,8 @@ def build_sheet(frames_dir: Path, settings: RenderSettings,
             if not fpath.exists():
                 raise FileNotFoundError(f"Render is incomplete: missing {fpath.name}")
             frame = Image.open(fpath).convert("RGBA")
-            if frame.size != (fw, fh):
-                frame = _crop_to_aspect(frame, fw, fh).resize((fw, fh), Image.LANCZOS)
+            if frame.size != (fw, fh) or settings.output_offset_x or settings.output_offset_y:
+                frame = _fit_cell(frame, settings)
             sheet.paste(frame, cell(di, fi))
     return sheet
 

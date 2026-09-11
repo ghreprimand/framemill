@@ -19,3 +19,15 @@ def test_view_direction_is_independent_of_single_direction_export():
     view = preview_settings(source, "E")
     assert view.direction_layout()[0] == ("E", -90)
     assert source.angles == 1 and source.start_direction == "S"
+
+
+def test_preview_keeps_source_yaw_loop_mode_and_framing():
+    source = RenderSettings(source_yaw=90, loop_mode="oneshot", framing_mode="fixed",
+                            framing_scale=3, anchor="feet", output_offset_x=4,
+                            start_direction="N")
+    view = preview_settings(source, "W")
+    assert view.direction_layout()[0][0] == "W"
+    assert view.source_yaw == 90 and source.source_yaw == 90
+    assert view.loop_mode == "oneshot" and view.framing_mode == "fixed"
+    assert view.anchor == "feet" and view.output_offset_x == 4
+    assert source.start_direction == "N"

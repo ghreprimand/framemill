@@ -50,6 +50,86 @@ def test_zero_frame_override_and_fractional_sampling(renderer, tmp_path):
     assert sampled == [0, 2.5, 5, 7.5]
 
 
+def test_oneshot_preview_matches_first_sheet_pose(renderer, tmp_path):
+    module, sampled = renderer
+    cfg = RenderSettings(angles=1, frames=5, loop_mode="oneshot",
+                         anim_start_override=0, anim_end_override=10).render_config()
+    module.render_all("walk.fbx", tmp_path, cfg, preview=True)
+    first = sampled[0]
+    sampled.clear()
+    module.render_all("walk.fbx", tmp_path, cfg)
+    assert first == sampled[0] == 0
+    assert sampled[-1] == 10
+
+
+def test_oneshot_samples_include_final_endpoint(renderer, tmp_path):
+    module, sampled = renderer
+    cfg = RenderSettings(angles=1, frames=4, loop_mode="oneshot",
+                         anim_start_override=0, anim_end_override=10,
+                         phase_offset=.5).render_config()
+    module.render_all("walk.fbx", tmp_path, cfg)
+    assert sampled[0] == 0
+    assert sampled[-1] == 10
+    assert sampled == pytest.approx([0, 10 / 3, 20 / 3, 10])
+
+
+def test_oneshot_reverse_does_not_wrap(renderer, tmp_path):
+    module, sampled = renderer
+    cfg = RenderSettings(angles=1, frames=3, loop_mode="oneshot", reverse=True,
+                         anim_start_override=0, anim_end_override=10).render_config()
+    module.render_all("walk.fbx", tmp_path, cfg)
+    assert sampled == [10, 5, 0]
+
+
+def test_apply_source_yaw_parents_roots_so_animation_can_update_local(renderer):
+    module, _ = renderer
+
+    class FakeMatrix:
+        def __init__(self):
+            self.identity_called = False
+
+        def identity(self):
+            self.identity_called = True
+
+    class FakeObj:
+        def __init__(self, name, parent=None):
+            self.name = name
+            self.parent = parent
+            self.matrix_parent_inverse = FakeMatrix()
+            self.matrix_world = "local-pose"
+
+    empty = type("Empty", (), {"rotation_euler": (0, 0, 0)})()
+    linked = []
+    module.bpy.data = SimpleNamespace(objects=SimpleNamespace(new=lambda *a, **k: empty))
+    module.bpy.context.scene.collection = SimpleNamespace(
+        objects=SimpleNamespace(link=lambda obj: linked.append(obj)))
+    root = FakeObj("MovingArm")
+    child = FakeObj("Mesh", parent=root)
+    module.apply_source_yaw([root, child], 90)
+    assert linked == [empty]
+    assert root.parent is empty
+    assert child.parent is root
+    assert root.matrix_parent_inverse.identity_called
+    assert root.matrix_world == "local-pose"
+    assert empty.rotation_euler[2] != 0
+    module.apply_source_yaw([root], 0)
+    assert root.parent is empty
+
+
+def test_source_yaw_is_applied_once_and_does_not_reorder_sheet(renderer, tmp_path, monkeypatch):
+    module, _ = renderer
+    seen = []
+    monkeypatch.setattr(module, "apply_source_yaw", lambda objs, yaw: seen.append(yaw))
+    written = []
+    monkeypatch.setattr(module.bpy.ops.render, "render", lambda **kw: written.append(
+        Path(module.bpy.context.scene.render.filepath).stem))
+    cfg = RenderSettings(angles=4, frames=1, start_direction="S", rotation="cw",
+                         source_yaw=90).render_config()
+    module.render_all("walk.fbx", tmp_path, cfg)
+    assert seen == [90]
+    assert [name.split("_")[0] for name in written] == ["S", "W", "N", "E"]
+
+
 def test_idle_preview_uses_same_idle_pose_as_sheet(renderer, tmp_path):
     module, sampled = renderer
     cfg = RenderSettings(angles=1, frames=4, phase_offset=.25, idle_frame_index=3).render_config()
@@ -77,3 +157,10 @@ def test_renderer_visits_directions_in_compass_order(renderer, tmp_path, monkeyp
         cfg.pop("_layout")
     module.render_all("walk.fbx", tmp_path, cfg)
     assert written == [f"{name}_00" for name in expected]
+
+
+def test_single_override_is_checked_against_detected_range(renderer, tmp_path):
+    module, _ = renderer
+    cfg = RenderSettings(angles=1, anim_start_override=100).render_config()
+    with pytest.raises(ValueError, match="Source start"):
+        module.render_all("walk.fbx", tmp_path, cfg)

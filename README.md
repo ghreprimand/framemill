@@ -24,7 +24,13 @@ TGA output) are handled automatically.
 - Import **FBX, glTF/GLB, OBJ**.
 - 1 / 4 / 8 / 16 directions; configurable frame count and sprite dimensions.
 - Automatic source preview, sprite/sheet views, direction switching, and animation playback.
-- Configurable direction order, row/column layout, cycle phase, and reverse timing.
+- Configurable direction order, row/column layout, loop or one-shot sampling,
+  source-range trim, cycle phase, and reverse timing.
+- Source-facing yaw (quarter turns or a numeric angle), independent of sheet
+  order and preview facing.
+- Shared framing: fit or fixed world scale, centre/feet anchor, output offsets.
+- Versioned portable recipes and an optional JSON animation-metadata sidecar.
+- Settings and aggregate sheet-size validation before render.
 - Saved render/export settings and cancellable background renders.
 - Presets (**Generic PBR**, **Tripo**, **Mixamo**) plus exposed camera, lighting,
   ambient, colour-management and material controls for anything else.
@@ -55,8 +61,9 @@ framemill            # launches the GUI
 ### Desktop workflow
 
 Select a model to render a front-facing (South) preview automatically, independently
-of the saved sheet start direction. South assumes the model uses the expected
-front orientation; Framemill does not detect or realign the mesh. Set the appearance,
+of the saved sheet start direction. If the mesh faces the wrong axis, use
+**Layout & timing → Source facing** (Left/Right 90° or a yaw value); that rotates
+the imported source and its animation without changing sheet order. Set the appearance,
 sprite dimensions, and layout, then choose **Render sheet**. Use the frame strip,
 direction buttons, and playback to review the animation. **Export sprite sheet**
 opens a separate output dialog and destination picker; rendering does not write
@@ -95,14 +102,18 @@ A typical workflow is:
    an animated FBX **with skin**, so the file contains the character mesh too.
    See [Adobe's rigging and animation guide](https://helpx.adobe.com/creative-cloud/help/mixamo-rigging-animation.html).
 3. Load that animated file as Framemill's **main source**. Set the sprite count
-   and directions; Framemill renders evenly spaced times from the source animation.
+   and directions. Choose **Loop** (walk cycles) or **One-shot** (attacks, deaths).
+   Trim the detected source start/end if needed. Save a recipe to reopen the same
+   setup later.
 4. Export each animation separately: for example, load `walk.fbx` and export
    `hero_walk.png`, then load `idle.fbx` as the main source and export `hero_idle.png`.
-   Use matching character scale, orientation, sprite dimensions and framing;
-   inspect the anchors across sheets, since each source is framed independently.
+   Lock **Fixed world scale** and the same world-unit origin (typically the
+   character's root at 0,0,0) plus output offsets so related sheets match. Fit
+   mode still sizes each clip from its own bounds and will shift if poses differ.
 5. Configure your game to select the idle or walk animation, its frame sequence,
-   direction mapping, playback speed, and looping behavior. An image sheet does
-   not encode those rules, and Framemill currently exports no animation metadata.
+   direction mapping, playback speed, and looping behavior. Optionally enable
+   **Write JSON sidecar** on export for layout, sample times, playback vs source
+   FPS, loop mode and pivot. The image itself does not encode those rules.
 
 A static model works too: choose **1 frame** per direction. Requesting more frames
 from a static source repeats the same pose; it does not animate the model.
@@ -110,26 +121,24 @@ from a static source repeats the same pose; it does not animate the model.
 ### Sampling and current limits
 
 - The renderer takes the range of the **first active action found on an imported
-  object**. If none is found, it uses Blender's scene range. There is no clip/action
-  selector, automatic stride detection, or automatic loop-boundary detection.
-  Export one intended animation per source file.
-- Sampling currently assumes a **loop**: with phase zero and forward playback,
+  object**. If none is found, it uses Blender's scene range. The workspace shows
+  the detected action, start, end, span and source FPS. Start/end fields trim
+  that range. There is no full NLA / multi-clip selector or automatic stride
+  detection. Export one intended animation per source file.
+- **Loop** keeps the walk-cycle formula: with phase zero and forward playback,
   sample `i` is `start + (i / frame_count) * (end - start)`. Fractional frames are
   evaluated. The final endpoint is excluded to avoid repeating a loop's first pose.
+  Phase wraps; reverse wraps.
+- **One-shot** includes both endpoints when there are two or more frames, ignores
+  phase, and reverses without wrapping. A single one-shot frame is the start pose
+  (or the end pose if reverse is on). Preview playback stops on the last frame
+  instead of looping.
 - Odd counts such as 11 are valid; they change temporal sampling density, not
-  the duration or content of the source motion. Phase shifts the starting point
-  around that range, and reverse reverses its traversal.
-- Non-looping actions such as attacks, jumps or deaths can be rendered, but
-  **the exact ending pose is not included**, and preview playback loops them.
-  There is no one-shot/include-end mode yet. Phase wrapping can also move the end
-  of a one-shot action before its beginning. These actions need care; current
-  output should not be assumed to preserve their full start-to-finish sequence.
-- Source start/end overrides exist in the backend settings, but are not exposed
-  in the desktop controls or CLI flags. Trim/select the intended clip in your
-  animation tool before export. `framemill inspect model.fbx` reports the range
-  used by the renderer.
-- The preview FPS control changes only viewer playback. It neither resamples the
-  sheet nor writes timing into the exported image. Set timing separately in-game.
+  the duration or content of the source motion.
+- `framemill inspect model.fbx` reports the range, action name and source FPS
+  used before overrides.
+- The preview FPS control changes only viewer playback. Frame count changes
+  sampling density. Optional metadata records both `playback_fps` and `source_fps`.
 
 ### First-frame replacement (advanced)
 
@@ -160,25 +169,31 @@ animations.
 ```bash
 framemill render walk.fbx -o hero --preset mixamo --angles 8 --frames 8 --format png,tga
 framemill render idle.fbx -o hero_idle --frames 16       # a separate idle animation sheet
+framemill render --recipe hero.recipe.json -o hero --metadata
 # Advanced compatibility only: replaces the first sample, not an extra idle slot
 framemill render walk.fbx -o hero_compat --frames 11 --idle idle.fbx
-framemill inspect walk.fbx                                # print frame range + fps
+framemill inspect walk.fbx                                # print frame range, action, fps
 ```
+
+`--frames` must be a positive integer. `--format` accepts `png` and/or `tga`.
+Oversized sheets and inverted source ranges are rejected before Blender starts.
 
 ## Troubleshooting and output conventions
 
-- **Facing sideways or backward:** South is a camera convention, not automatic
-  model alignment. Sheet start direction changes cell order. Preview facing
-  buttons change only the view. There is no model-facing correction control yet;
-  correct the source orientation in your modelling tool and export again.
+- **Facing sideways or backward:** South is a camera convention. Sheet start
+  direction changes cell order. Preview facing buttons change only the view.
+  Use **Source facing** (quarter turns or yaw) to rotate the imported source
+  and its animation. That does not change sheet order.
 - **Character drifts or looks too small:** motion that translates through space
   contributes to the whole-clip bounds. Prepare an in-place animation if your
-  game moves the actor itself. Framemill does not remove root motion.
-- **Weapons, feet or wide poses are clipped:** increase Camera → Framing and
-  render again; larger values make the model smaller. Check all directions and
-  extreme poses. Automatic framing uses model height and the compositor crops
-  to the sprite aspect ratio; it is not guaranteed to fit every silhouette.
-  Viewer panning and zoom do not change the exported crop.
+  game moves the actor itself. Framemill does not remove root motion. For
+  matching clips, use Fixed world scale and the same world-unit origin plus
+  output offsets (+X right, +Y down in the cell) rather than Fit-this-clip.
+- **Weapons, feet or wide poses are clipped:** increase Camera → Fit multiplier
+  or Fixed world scale and render again; larger values make the model smaller.
+  Check all directions and extreme poses. Fit mode uses model height and the
+  compositor crops to the sprite aspect ratio; it is not guaranteed to fit every
+  silhouette. Viewer panning and zoom do not change the exported crop.
 - **Camera controls:** 90° is level; smaller values look down from above.
   Framing sets orthographic scale. Orbit distance is not a zoom control and
   also affects the light placement; use Framing to change sprite size.
@@ -198,9 +213,10 @@ framemill inspect walk.fbx                                # print frame range + 
 - **Direction mapping:** clockwise from North is N → NE → E → SE → S → SW → W → NW.
   The layout panel lists the actual output order. Match that order in your game;
   do not assume its importer uses the same convention.
-- **CLI scope:** the current CLI supports basic PNG/TGA export and fewer render
-  controls than the desktop app. It does not load the GUI's saved settings or
-  offer its export presets, palette controls, or BMP path.
+- **CLI scope:** the CLI supports PNG/TGA export, `--recipe`, `--metadata`, and
+  the same settings validation as the app. It does not offer the GUI export
+  presets, palette controls, or BMP output. CLI recipes currently restore source
+  and render settings; their export settings are used by the GUI only.
 - **Reporting a problem:** include OS, Blender and Framemill versions, source
   format, preset, dimensions/frame count/directions, steps, and the error text.
   A minimal source you are permitted to share helps reproduce rendering issues.
@@ -208,16 +224,21 @@ framemill inspect walk.fbx                                # print frame range + 
 Settings are stored in `framemill/config.json` under the user configuration
 directory: `$XDG_CONFIG_HOME` (or `~/.config`) on Linux,
 `~/Library/Application Support` on macOS, and `%APPDATA%` on Windows.
-These are application preferences, not a portable project file.
+These are application preferences. Use **Save recipe** for a portable, versioned
+project file with relative source paths; that is separate from the user config.
 
 ## Packaging
 
-Desktop builds use [`flet build`](https://flet.dev). Linux distribution is
-wrapped into a portable **AppImage** (see `packaging/build_appimage.sh`); the CI
-workflow in `.github/workflows/build.yml` defines builds for all three
-platforms. Packaging is still a development scaffold: the AppImage script uses
-a placeholder icon and assumes a bundle layout. Validate clean installs and
-launches on each platform before distributing binaries.
+Desktop builds use [`flet build`](https://flet.dev) with the repository `main.py`
+entrypoint; CI pins the tested Flet CLI to 0.86.5.
+Linux bundles can be wrapped into an **AppImage** using
+`packaging/build_appimage.sh` and a trusted local `appimagetool` executable.
+The script does not download or execute packaging tools automatically.
+CI uploads the Linux bundle if that tool is unavailable. The workflow in
+`.github/workflows/build.yml` defines builds for all three platforms. Packaging
+is still a development scaffold. This checkout has not validated clean installs
+or launches on Windows, macOS, or a clean Linux machine — do that before
+distributing binaries.
 
 ## How it works
 

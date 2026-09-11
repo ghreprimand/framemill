@@ -13,9 +13,9 @@ from pathlib import Path
 import flet as ft
 from PIL import Image
 
-from . import appconfig, blender, compositor, export, guide
+from . import appconfig, blender, compositor, export, guide, recipe
 from .export import DEFAULT_EXPORT, EXPORT_PRESETS, ExportConfig
-from .settings import PRESETS, RenderSettings, direction_names
+from .settings import PRESETS, RenderSettings, direction_names, next_playback_frame
 
 BG = "#101213"
 PANEL = "#191c1d"
@@ -56,11 +56,16 @@ def main(page: ft.Page) -> None:
     page.window.width, page.window.height = 1440, 940
     page.window.min_width, page.window.min_height = 1050, 740
     saved = appconfig.load()
-    settings = RenderSettings.from_dict(saved.get("render_settings", {}))
+    settings, setting_warnings = RenderSettings.from_dict_recovering(saved.get("render_settings", {}))
     cfg_fields = ExportConfig.__dataclass_fields__
-    export_cfg = ExportConfig(**{k: v for k, v in saved.get("export_settings", {}).items()
-                                 if k in cfg_fields}) if saved.get("export_settings") else copy.deepcopy(
-                                     EXPORT_PRESETS[DEFAULT_EXPORT].config)
+    try:
+        export_cfg = ExportConfig(**{k: v for k, v in saved.get("export_settings", {}).items()
+                                     if k in cfg_fields}) if saved.get("export_settings") else copy.deepcopy(
+                                         EXPORT_PRESETS[DEFAULT_EXPORT].config)
+        export.validate_config(export_cfg)
+    except (TypeError, ValueError) as exc:
+        setting_warnings.append(f"Saved export settings were reset: {exc}")
+        export_cfg = copy.deepcopy(EXPORT_PRESETS[DEFAULT_EXPORT].config)
     model: str | None = None
     idle: str | None = None
     bpath = blender.find_blender()
@@ -79,6 +84,10 @@ def main(page: ft.Page) -> None:
     view = "sprite"
     zoom = 3
     fps = 8
+    detected = {"frame_start": None, "frame_end": None, "fps": None,
+                "action": None, "duration_frames": None}
+    result_detected: dict = {}
+    inspect_token = 0
     cancel = threading.Event()
     picker = ft.FilePicker()
     page.services.append(picker)
@@ -100,7 +109,7 @@ def main(page: ft.Page) -> None:
                                         side=ft.BorderSide(0 if primary else 1, BORDER)), **kwargs)
 
     def field(label, value, on_change, width=None, **kwargs):
-        return ft.TextField(label=label, value=str(value), on_change=on_change, width=width,
+        return ft.TextField(label=label, value=str(value), on_change=on_change or (lambda e: None), width=width,
                             text_size=12, dense=True, filled=True, fill_color=BG,
                             border_color=BORDER, focused_border_color=ACCENT,
                             border_radius=7, **kwargs)
@@ -136,6 +145,8 @@ def main(page: ft.Page) -> None:
     model_name = text("No source loaded", 13, TEXT, ft.FontWeight.W_500,
                       no_wrap=True, overflow=ft.TextOverflow.ELLIPSIS)
     model_detail = text("FBX, GLB, glTF or OBJ", 10, FAINT)
+    source_clip = text("Load a model to read its animation range.", 11, MUTED)
+    source_clip_motion = text("Load a model to read its animation range.", 11, MUTED)
     idle_name = text("No replacement model", 11, MUTED, expand=True,
                      no_wrap=True, overflow=ft.TextOverflow.ELLIPSIS)
     headline = text("Your next character starts here.", 24, TEXT, ft.FontWeight.W_600)
@@ -231,6 +242,35 @@ def main(page: ft.Page) -> None:
             event.control.error = f"Enter 1–{maximum}"
             page.update()
 
+    def optional_frame(name, event):
+        raw = (event.control.value or "").strip()
+        if raw == "":
+            event.control.error = None
+            change(name, None)
+            return
+        try:
+            event.control.error = None
+            change(name, int(raw))
+        except ValueError:
+            event.control.error = "Enter a frame number"
+            page.update()
+
+    def signed_int(name, event):
+        try:
+            event.control.error = None
+            change(name, int(event.control.value))
+        except ValueError:
+            event.control.error = "Enter a whole number"
+            page.update()
+
+    def decimal(name, event):
+        try:
+            event.control.error = None
+            change(name, float(event.control.value))
+        except ValueError:
+            event.control.error = "Enter a number"
+            page.update()
+
     def color_change(name, event):
         try:
             export.hex_to_rgb(event.control.value)
@@ -259,13 +299,29 @@ def main(page: ft.Page) -> None:
         return ft.Column([caption(label), *controls], spacing=12)
 
     def update_geometry():
-        w, h = settings.frame_width, settings.frame_height
-        sw, sh = ((w * settings.angles, h * settings.frames) if settings.layout_axis == "cols"
-                  else (w * settings.frames, h * settings.angles))
-        geometry.value = f"{sw} × {sh} px sheet  ·  {settings.angles * settings.frames} sprites"
+        sw, sh = settings.sheet_size()
+        mib = settings.estimated_sheet_bytes() / (1024 ** 2)
+        geometry.value = (
+            f"{sw} × {sh} px sheet  ·  {settings.angles * settings.frames} sprites  ·  ~{mib:.1f} MiB RGBA"
+        )
         axis = "Row" if settings.layout_axis == "rows" else "Column"
         names = [name if name != "angle0" else "Front" for name, _ in settings.direction_layout()]
         layout_order.value = f"{axis} order: " + " → ".join(names)
+
+    def update_source_clip():
+        if detected.get("frame_start") is None:
+            message = "Load a model to read its animation range."
+        else:
+            action = detected.get("action") or "scene range"
+            span = detected.get("duration_frames")
+            fps_v = detected.get("fps")
+            message = (
+                f"Detected: {action} · frames {detected['frame_start']}–{detected['frame_end']}"
+                + (f" · {span}-frame span" if span is not None else "")
+                + (f" · {fps_v} fps source" if fps_v else "")
+            )
+        source_clip.value = message
+        source_clip_motion.value = message
 
     geometry = text("", 10, ACCENT)
     layout_order = text("", 11, ACCENT)
@@ -287,7 +343,37 @@ def main(page: ft.Page) -> None:
         if inspector_tab == "look":
             inspector.controls = [
                 section("Camera", [slider("Elevation · 90° is level", "camera_pitch", 30, 120, 90, "°"),
-                                   slider("Framing", "ortho_scale_mult", .5, 4, 70, "×"),
+                                   dropdown("Framing mode", settings.framing_mode,
+                                            [("fit", "Fit this clip"), ("fixed", "Fixed world scale")],
+                                            framing_mode_changed),
+                                   slider("Fit multiplier", "ortho_scale_mult", .5, 4, 70, "×"),
+                                   field("Fixed world scale", settings.framing_scale,
+                                         lambda e: decimal("framing_scale", e),
+                                         disabled=settings.framing_mode != "fixed"),
+                                   ft.Row([
+                                       field("Origin X", settings.framing_origin_x,
+                                             lambda e: decimal("framing_origin_x", e), expand=True,
+                                             disabled=settings.framing_mode != "fixed"),
+                                       field("Origin Y", settings.framing_origin_y,
+                                             lambda e: decimal("framing_origin_y", e), expand=True,
+                                             disabled=settings.framing_mode != "fixed"),
+                                       field("Origin Z", settings.framing_origin_z,
+                                             lambda e: decimal("framing_origin_z", e), expand=True,
+                                             disabled=settings.framing_mode != "fixed"),
+                                   ], spacing=8),
+                                   dropdown("Anchor", settings.anchor,
+                                            [("center", "Bounds centre"), ("feet", "Feet / lowest point")],
+                                            lambda v: change("anchor", v),
+                                            disabled=settings.framing_mode == "fixed"),
+                                   ft.Row([
+                                       field("Offset X · px", settings.output_offset_x,
+                                             lambda e: signed_int("output_offset_x", e), expand=True),
+                                       field("Offset Y · px", settings.output_offset_y,
+                                             lambda e: signed_int("output_offset_y", e), expand=True),
+                                   ], spacing=10),
+                                   text("Fixed scale and origin are world units and stay identical across clips. "
+                                        "Fit mode may use this clip's bounds. Output offsets are finished-cell "
+                                        "pixels (+X right, +Y down). Viewer pan/zoom is display-only.", 11, MUTED),
                                    slider("Orbit distance", "camera_distance", .5, 10, 95)]),
                 section("Light & environment", [slider("Light energy", "light_energy", 0, 3000, 60),
                     slider("Softness", "shadow_soft_size", 0, 2, 40),
@@ -315,12 +401,37 @@ def main(page: ft.Page) -> None:
                              [("rows", "Directions as rows"), ("cols", "Directions as columns")],
                              lambda v: change("layout_axis", v)),
                     layout_order,
-                    text("Direction names assume your model faces the front camera. Ordering varies by engine.", 11, MUTED)]),
-                section("Animation cycle", [slider("First pose / phase", "phase_offset", 0, 1, 100),
+                    text("Sheet order only changes cell sequence. It does not rotate the mesh.", 11, MUTED)]),
+                section("Source facing", [
+                    ft.Row([
+                        button("Left 90°", ft.Icons.ROTATE_LEFT, lambda e: nudge_yaw(90)),
+                        button("Right 90°", ft.Icons.ROTATE_RIGHT, lambda e: nudge_yaw(-90)),
+                    ], spacing=8),
+                    field("Yaw · degrees", settings.source_yaw, lambda e: decimal("source_yaw", e)),
+                    text("Rotates the imported source (and its animation) around world Z. "
+                         "Independent of preview facing and sheet order.", 11, MUTED)]),
+                section("Animation", [
+                    dropdown("Playback / sampling", settings.loop_mode,
+                             [("loop", "Loop · exclude end pose"), ("oneshot", "One-shot · include end pose")],
+                             loop_mode_changed),
+                    source_clip_motion,
+                    ft.Row([
+                        field("Source start", "" if settings.anim_start_override is None else settings.anim_start_override,
+                              lambda e: optional_frame("anim_start_override", e), expand=True,
+                              hint_text="detected"),
+                        field("Source end", "" if settings.anim_end_override is None else settings.anim_end_override,
+                              lambda e: optional_frame("anim_end_override", e), expand=True,
+                              hint_text="detected"),
+                    ], spacing=10),
+                    slider("First pose / phase", "phase_offset", 0, 1, 100) if settings.loop_mode != "oneshot"
+                    else text("Phase is ignored for one-shot clips.", 11, MUTED),
                     ft.Switch(label="Reverse playback", value=settings.reverse, active_color=ACCENT,
                               on_change=lambda e: change("reverse", e.control.value)),
-                    text("Evenly samples the source action as a loop; the final endpoint is excluded. "
-                         "Phase wraps within that range. See Quick guide for one-shot limits.", 11, MUTED)]),
+                    text("Loop wraps and skips the final endpoint so a walk cycle does not repeat its first pose. "
+                         "One-shot includes both endpoints when there are two or more frames; "
+                         "a single frame is the start pose (or the end pose if reversed). "
+                         "Preview playback stops at the last one-shot frame. "
+                         "Full action/NLA clip picking remains future work — one intended action per file.", 11, MUTED)]),
                 section("First-frame replacement (advanced)", [ft.Row([idle_name, ft.IconButton(ft.Icons.CLOSE, icon_size=16,
                                                                  on_click=clear_idle)]),
                     button("Choose replacement model", ft.Icons.ACCESSIBILITY_NEW, lambda e: page.run_task(pick_source, True)),
@@ -346,6 +457,57 @@ def main(page: ft.Page) -> None:
             settings.start_direction = "S"
         build_inspector()
         mark_changed()
+
+    def loop_mode_changed(value):
+        settings.loop_mode = value
+        build_inspector()
+        mark_changed()
+
+    def framing_mode_changed(value):
+        settings.framing_mode = value
+        build_inspector()
+        mark_changed()
+
+    def nudge_yaw(delta):
+        settings.source_yaw = float(settings.source_yaw or 0) + delta
+        build_inspector()
+        mark_changed()
+
+    def sync_chrome():
+        width_field.value = str(settings.frame_width)
+        height_field.value = str(settings.frame_height)
+        frames_field.value = str(settings.frames)
+        width_field.error = height_field.error = frames_field.error = None
+        appearance_dd.value = appearance_key()
+        build_inspector()
+        update_geometry()
+
+    def inspect_job(executable, source, token):
+        try:
+            info = blender.inspect(executable, source)
+        except Exception as exc:  # noqa: BLE001 — inspect is best-effort UI metadata
+            if token != inspect_token or model != source:
+                return
+            detected.update(frame_start=None, frame_end=None, fps=None,
+                            action=None, duration_frames=None)
+            source_clip.value = source_clip_motion.value = f"Could not inspect animation: {exc}"
+            page.update()
+            return
+        if token != inspect_token or model != source:
+            return
+        detected.update({key: info.get(key) for key in
+                         ("frame_start", "frame_end", "fps", "action", "duration_frames")})
+        if result_source == source:
+            result_detected.update(detected)
+        update_source_clip()
+        page.update()
+
+    def start_inspect():
+        nonlocal inspect_token
+        if not bpath or not model:
+            return
+        inspect_token += 1
+        page.run_thread(inspect_job, bpath, model, inspect_token)
 
     def clear_idle(e=None):
         nonlocal idle
@@ -403,7 +565,75 @@ def main(page: ft.Page) -> None:
             empty.visible = True
             viewport.content = empty
             export_btn.disabled = True
+            start_inspect()
         start_render(True)
+
+    async def pick_recipe(saving=False):
+        if page.web:
+            path_field = field("Absolute path on this computer", "", None, width=500,
+                               hint_text="/path/to/character.recipe.json")
+
+            def confirm(e):
+                if not (path_field.value or "").strip():
+                    path_field.error = "Enter a recipe file path."
+                    page.update()
+                    return
+                path = Path(path_field.value).expanduser()
+                page.pop_dialog()
+                if saving:
+                    save_recipe_to(path)
+                else:
+                    load_recipe_from(path)
+
+            page.show_dialog(ft.AlertDialog(
+                title=text("Save recipe" if saving else "Load recipe", 20),
+                content=ft.Column([
+                    text("Browser preview uses a file path on this computer.", 12, MUTED),
+                    path_field], tight=True),
+                actions=[button("Cancel", ft.Icons.CLOSE, lambda e: page.pop_dialog()),
+                         button("Save" if saving else "Load", ft.Icons.ARROW_FORWARD, confirm, True)],
+                bgcolor=PANEL))
+            return
+        if saving:
+            dest = await picker.save_file(
+                file_name=f"{Path(model).stem if model else 'character'}.recipe.json",
+                file_type=ft.FilePickerFileType.CUSTOM, allowed_extensions=["json"])
+            if dest:
+                save_recipe_to(dest)
+            return
+        files = await picker.pick_files(allow_multiple=False, file_type=ft.FilePickerFileType.CUSTOM,
+                                        allowed_extensions=["json"])
+        if files and files[0].path:
+            load_recipe_from(files[0].path)
+
+    def save_recipe_to(path):
+        if not model:
+            notify("Choose a source model before saving a recipe.")
+            return
+        try:
+            recipe.save_recipe(Path(path), recipe.build_recipe(model, settings, export_cfg, idle=idle))
+            notify(f"Saved recipe {Path(path).name}")
+        except (ValueError, OSError) as exc:
+            notify(str(exc))
+
+    def load_recipe_from(path):
+        nonlocal settings, export_cfg, idle
+        try:
+            rec = recipe.load_recipe(Path(path))
+        except (ValueError, OSError) as exc:
+            notify(str(exc))
+            return
+        if not rec.source or not Path(rec.source).is_file():
+            notify(f"Recipe source not found at {rec.source}. Current project was left unchanged.")
+            return
+        settings = rec.settings
+        export_cfg = rec.export
+        idle = rec.idle
+        idle_name.value = Path(idle).name if idle else "No replacement model"
+        sync_chrome()
+        persist()
+        set_source(rec.source)
+        notify(f"Loaded recipe {Path(path).name}")
 
     def show_result(rebuild_strip=False):
         if result is None or result_settings is None:
@@ -495,20 +725,29 @@ def main(page: ft.Page) -> None:
         fps = int(value)
 
     async def animate(generation):
-        nonlocal frame
+        nonlocal frame, playing
         while playing and generation == play_generation and not busy and result_settings:
             await asyncio.sleep(1 / fps)
             if not playing or generation != play_generation or busy or not result_settings:
                 break
-            frame = (frame + 1) % result_settings.frames
+            nxt = next_playback_frame(frame, result_settings.frames, result_settings.loop_mode)
+            if nxt is None:
+                playing = False
+                play_btn.icon = ft.Icons.PLAY_ARROW_ROUNDED
+                show_result()
+                break
+            frame = nxt
             show_result()
 
     def toggle_play(e):
-        nonlocal playing, play_generation
+        nonlocal playing, play_generation, frame
         play_generation += 1
         playing = not playing
         play_btn.icon = ft.Icons.PAUSE_ROUNDED if playing else ft.Icons.PLAY_ARROW_ROUNDED
         if playing:
+            if (result_settings and result_settings.loop_mode == "oneshot"
+                    and frame >= result_settings.frames - 1):
+                frame = 0
             set_view("sprite")
             page.run_task(animate, play_generation)
         page.update()
@@ -541,8 +780,22 @@ def main(page: ft.Page) -> None:
         if not bpath:
             notify("Locate Blender using the connection control below.")
             return
-        if any(c.error for c in (width_field, height_field, frames_field)):
-            notify("Correct the sprite dimensions or frame count before rendering.")
+        def input_error(control):
+            if isinstance(control, ft.TextField) and control.error:
+                return True
+            children = list(getattr(control, "controls", None) or [])
+            content = getattr(control, "content", None)
+            if isinstance(content, ft.Control):
+                children.append(content)
+            return any(input_error(child) for child in children)
+
+        if any(input_error(c) for c in (width_field, height_field, frames_field, inspector)):
+            notify("Correct the highlighted settings before rendering.")
+            return
+        try:
+            settings.validate()
+        except (ValueError, OSError) as exc:
+            notify(str(exc))
             return
         playing = False
         play_btn.icon = ft.Icons.PLAY_ARROW_ROUNDED
@@ -568,6 +821,9 @@ def main(page: ft.Page) -> None:
                                preview=preview, on_progress=update, cancel=cancel)
                 image = compositor.build_preview(frames_dir, job) if preview else compositor.build_sheet(frames_dir, job)
             result, result_settings, result_source = image, job, source
+            result_detected.clear()
+            if model == source:
+                result_detected.update(detected)
             is_preview, stale, direction, frame = preview, False, 0, 0
             if not preview:
                 names = [name for name, _ in job.direction_layout()]
@@ -752,19 +1008,40 @@ def main(page: ft.Page) -> None:
                 export_controls.controls.append(field("Fixed colours · #RRGGBB", " ".join(
                     f"#{c[0]:02x}{c[1]:02x}{c[2]:02x}" for c in draft.fixed_palette or []), fixed_changed,
                     multiline=True, min_lines=2, max_lines=4))
+            export_controls.controls += [
+                ft.Divider(color=BORDER), caption("Animation metadata"),
+                ft.Switch(label="Write JSON sidecar", value=draft.write_metadata, active_color=ACCENT,
+                          on_change=lambda e: change_export("write_metadata", e.control.value)),
+                text("Optional sidecar: cell layout, sample times, source vs playback FPS, loop mode and pivot. "
+                     "It does not change the image.", 11, MUTED),
+            ]
             if not indexed:
                 export_controls.controls.append(text("Choose 8-bit indexed to enable palettes and dithering.", 11, FAINT))
 
         async def save_output(e):
             nonlocal export_cfg
             try:
-                # Validate again before displaying a save picker.
-                export.process(original, draft)
+                export.validate_config(draft)
                 filename = f"{Path(result_source).stem}_sheet.{draft.format}"
+                meta = None
+                if draft.write_metadata and result_settings is not None:
+                    snap = result_detected or detected
+                    meta = recipe.animation_metadata(
+                        result_settings, clip_name=Path(result_source).name,
+                        source_start=snap.get("frame_start"),
+                        source_end=snap.get("frame_end"),
+                        source_fps=snap.get("fps") or None,
+                        playback_fps=fps,
+                        replacement_used=bool(idle),
+                        replacement_name=Path(idle).name if idle else None,
+                    )
                 if page.web:
                     with tempfile.TemporaryDirectory() as tmp:
                         p = export.save(original, Path(tmp) / filename, draft)
                         await picker.save_file(file_name=filename, src_bytes=p.read_bytes())
+                        if meta is not None:
+                            side = recipe.write_metadata(p, meta)
+                            await picker.save_file(file_name=side.name, src_bytes=side.read_bytes())
                     message = f"Export prepared: {filename}"
                 else:
                     destination = await picker.save_file(file_name=filename,
@@ -774,6 +1051,9 @@ def main(page: ft.Page) -> None:
                         return
                     p = export.save(original, Path(destination), draft)
                     message = f"Exported {p.name} → {p.parent}"
+                    if meta is not None:
+                        side = recipe.write_metadata(p, meta)
+                        message += f" · {side.name}"
                 export_cfg = copy.deepcopy(draft)
                 persist()
                 page.pop_dialog()
@@ -816,6 +1096,11 @@ def main(page: ft.Page) -> None:
                 ft.IconButton(ft.Icons.FOLDER_OPEN_OUTLINED, icon_size=18, icon_color=MUTED,
                               tooltip="Choose model", on_click=lambda e: page.run_task(pick_source)),
             ], spacing=12), bgcolor=CARD, padding=12, border_radius=9),
+                source_clip,
+                ft.Row([
+                    button("Load recipe", ft.Icons.FOLDER_OPEN, lambda e: page.run_task(pick_recipe, False)),
+                    button("Save recipe", ft.Icons.SAVE_OUTLINED, lambda e: page.run_task(pick_recipe, True)),
+                ], spacing=8),
                 appearance_dd]),
             ft.Divider(color=BORDER, height=1),
             section("02 / Sprite geometry", [ft.Row([width_field, height_field], spacing=10),
@@ -880,6 +1165,8 @@ def main(page: ft.Page) -> None:
     build_inspector()
     page.add(ft.Column([topbar, ft.Row([sidebar, workspace], expand=True, spacing=0), progress, footer],
                        spacing=0, expand=True))
+    if setting_warnings:
+        notify("Restored usable defaults from saved settings. " + " ".join(setting_warnings[:3]))
 
 
 def run() -> None:

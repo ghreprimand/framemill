@@ -85,7 +85,7 @@ def _run(blender_path: str, args: list[str],
 
 
 def inspect(blender_path: str, model_path: str) -> dict:
-    """Return {frame_start, frame_end, fps} for the model's animation."""
+    """Return {frame_start, frame_end, fps, action, duration_frames} for the model."""
     with tempfile.TemporaryDirectory() as tmp:
         cfg = Path(tmp) / "config.json"
         cfg.write_text("{}")

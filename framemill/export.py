@@ -39,11 +39,14 @@ class ExportConfig:
     palette_path: str | None = None
     palette_colors: int = 256           # for auto
     fixed_palette: list[RGB] | None = None
+    write_metadata: bool = False        # optional JSON sidecar next to the image
 
 
 # ----------------------------------------------------------------- colour utils
 def hex_to_rgb(s: str) -> RGB:
-    s = (s or "#000000").lstrip("#")
+    if not isinstance(s, str) or len(s.lstrip("#")) not in (3, 6):
+        raise ValueError("Use a colour in #RGB or #RRGGBB format.")
+    s = s.lstrip("#")
     if len(s) == 3:
         s = "".join(c * 2 for c in s)
     return (int(s[0:2], 16), int(s[2:4], 16), int(s[4:6], 16))
@@ -210,8 +213,27 @@ def _tga(img: Image.Image, bits: int, magic_pink: bool = False) -> bytes:
 
 
 # ----------------------------------------------------------------- main entry
-def process(sheet: Image.Image, cfg: ExportConfig) -> Image.Image:
-    """Apply the full pixel pipeline, returning a PIL image in final mode."""
+def validate_config(cfg: ExportConfig) -> None:
+    """Reject invalid export settings without allocating an image."""
+    for name in ("depth", "alpha_cutoff", "dilate", "palette_colors"):
+        if type(getattr(cfg, name)) is not int:
+            raise ValueError(f"{name} must be a whole number.")
+    if type(cfg.write_metadata) is not bool:
+        raise ValueError("Metadata option must be true or false.")
+    if not 0 <= cfg.dilate <= 16:
+        raise ValueError("Edge bleed must be between 0 and 16 pixels.")
+    hex_to_rgb(cfg.solid_color)
+    if cfg.palette_path is not None and not isinstance(cfg.palette_path, str):
+        raise ValueError("Palette path must be text.")
+    if cfg.fixed_palette is not None:
+        if not isinstance(cfg.fixed_palette, (list, tuple)) or not 1 <= len(cfg.fixed_palette) <= 256:
+            raise ValueError("Fixed palette must contain 1 to 256 RGB colours.")
+        for colour in cfg.fixed_palette:
+            if (not isinstance(colour, (list, tuple)) or len(colour) != 3
+                    or any(type(c) is not int or not 0 <= c <= 255 for c in colour)):
+                raise ValueError("Palette colours must be RGB integers from 0 to 255.")
+    if cfg.palette_source == "fixed" and not cfg.fixed_palette:
+        raise ValueError("Enter at least one fixed palette colour.")
     if cfg.format not in ("png", "tga", "bmp") or cfg.depth not in (8, 24, 32):
         raise ValueError("Choose a supported format and colour depth.")
     if cfg.background not in ("transparent", "magic_pink", "solid"):
@@ -220,8 +242,25 @@ def process(sheet: Image.Image, cfg: ExportConfig) -> Image.Image:
         raise ValueError("Transparent output requires 32-bit PNG or TGA. Use a colour key for indexed output.")
     if cfg.format == "bmp" and cfg.depth == 32:
         raise ValueError("Choose 24-bit or indexed 8-bit for BMP.")
-    if not 2 <= cfg.palette_colors <= 256:
+    if cfg.alpha_mode not in ("soft", "hard"):
+        raise ValueError("Alpha treatment must be soft or hard.")
+    if not 0 <= int(cfg.alpha_cutoff) <= 255:
+        raise ValueError("Alpha cutoff must be between 0 and 255.")
+    if cfg.dither not in ("none", "ordered", "floyd"):
+        raise ValueError("Dithering must be none, ordered or floyd.")
+    if cfg.palette_source not in ("auto", "file", "fixed"):
+        raise ValueError("Palette source must be auto, file or fixed.")
+    if not 2 <= int(cfg.palette_colors) <= 256:
         raise ValueError("Palette size must be between 2 and 256 colours.")
+    if cfg.dilate < 0:
+        raise ValueError("Edge bleed cannot be negative.")
+    if cfg.palette_source == "file" and not cfg.palette_path:
+        raise ValueError("Choose a palette file first.")
+
+
+def process(sheet: Image.Image, cfg: ExportConfig) -> Image.Image:
+    """Apply the full pixel pipeline, returning a PIL image in final mode."""
+    validate_config(cfg)
     img = sheet.convert("RGBA")
     if cfg.dilate:
         img = dilate_edges(img, cfg.dilate)

@@ -110,6 +110,70 @@ def anim_range(objs):
     return bpy.context.scene.frame_start, bpy.context.scene.frame_end
 
 
+def first_action_name(objs):
+    for o in objs:
+        ad = o.animation_data
+        if ad and ad.action:
+            return ad.action.name
+    return None
+
+
+def apply_source_yaw(objs, yaw_deg):
+    """Yaw imported roots via a non-animated parent.
+
+    Mutating ``matrix_world`` is overwritten by object/armature keys on
+    ``frame_set``. Parent with an identity inverse so local animation stays
+    intact; the empty's Z rotation then applies every frame.
+    """
+    yaw = float(yaw_deg or 0.0)
+    if abs(yaw) < 1e-9:
+        return
+    empty = bpy.data.objects.new("FMOrient", None)
+    bpy.context.scene.collection.objects.link(empty)
+    imported = set(objs)
+    for o in objs:
+        if o.parent is None or o.parent not in imported:
+            o.parent = empty
+            o.matrix_parent_inverse.identity()
+    empty.rotation_euler = (0.0, 0.0, math.radians(yaw))
+
+
+def sample_source_time(fi, frames, start, end, loop_mode="loop", phase=0.0, reverse=False):
+    """Match framemill.settings.sample_source_times for a single output index."""
+    length = float(end) - float(start)
+    count = max(int(frames), 1)
+    if length == 0:
+        return float(start)
+    if loop_mode == "oneshot":
+        frac = 0.0 if count == 1 else fi / (count - 1)
+        if reverse:
+            frac = 1.0 - frac
+        return float(start) + frac * length
+    frac = (fi / count) + float(phase or 0.0)
+    frac %= 1.0
+    if reverse:
+        frac = (1.0 - frac) % 1.0
+    return float(start) + frac * length
+
+
+def camera_ortho_scale(size, cfg):
+    if cfg.get("framing_mode") == "fixed":
+        scale = float(cfg.get("framing_scale") or 0.0)
+        if scale > 0:
+            return scale
+    return max(size[2], 1e-3) * cfg.get("ortho_scale_mult", 1.8)
+
+
+def camera_target(center, size, cfg):
+    if cfg.get("framing_mode") == "fixed":
+        return (float(cfg.get("framing_origin_x", 0.0) or 0.0),
+                float(cfg.get("framing_origin_y", 0.0) or 0.0),
+                float(cfg.get("framing_origin_z", 0.0) or 0.0))
+    if cfg.get("anchor") == "feet":
+        return (center[0], center[1], center[2] - size[2] / 2.0)
+    return center
+
+
 def max_bounds(objs, start, end):
     lo = [float("inf")] * 3
     hi = [float("-inf")] * 3
@@ -136,7 +200,7 @@ def setup_camera(center, size, angle_deg, cfg):
         bpy.data.objects.remove(o)
     cam = bpy.data.cameras.new("FMCamera")
     cam.type = "ORTHO"
-    cam.ortho_scale = max(size[2], 1e-3) * cfg.get("ortho_scale_mult", 1.8)
+    cam.ortho_scale = camera_ortho_scale(size, cfg)
     obj = bpy.data.objects.new("FMCamera", cam)
     bpy.context.scene.collection.objects.link(obj)
     dist = cfg.get("camera_distance", 2.52)
@@ -240,42 +304,42 @@ def render_all(model, out_dir, cfg, idle=None, preview=False):
         layout = full_layout
         frames = cfg.get("frames", 4)
 
-    phase = float(cfg.get("phase_offset", 0.0) or 0.0)
+    loop_mode = cfg.get("loop_mode", "loop") or "loop"
+    phase = 0.0 if loop_mode == "oneshot" else float(cfg.get("phase_offset", 0.0) or 0.0)
     reverse = bool(cfg.get("reverse", False))
     Path(out_dir).mkdir(parents=True, exist_ok=True)
     total = len(layout) * frames
 
-    def sample_frame(fi, start, length):
-        if length <= 0:
-            return start
-        frac = (fi / max(frames, 1)) + phase
-        frac = frac % 1.0
-        if reverse:
-            frac = (1.0 - frac) % 1.0
-        return start + frac * length
+    def sample_frame(fi, start, end):
+        return sample_source_time(fi, frames, start, end, loop_mode, phase, reverse)
 
     def render_from(path, frame_indices, ref=None, idle_pose=False):
         clear_scene()
         objs = import_model(path)
+        apply_source_yaw(objs, cfg.get("source_yaw", 0.0))
         adjust_materials(cfg)
         start, end = anim_range(objs)
         if cfg.get("anim_start_override") is not None:
             start = cfg["anim_start_override"]
         if cfg.get("anim_end_override") is not None:
             end = cfg["anim_end_override"]
+        if start > end:
+            raise ValueError("Source start must be at or before the detected/selected source end.")
+        if end - start > 10000:
+            raise ValueError("Source range must span at most 10000 frames; trim the source range.")
         center, size = ref if ref else max_bounds(objs, start, end)
+        target = camera_target(center, size, cfg)
         setup_render(cfg, preview)
-        length = end - start
         counter = render_from.counter
         for name, deg in layout:
-            setup_camera(center, size, deg, cfg)
-            setup_light(center, deg, cfg)
+            setup_camera(target, size, deg, cfg)
+            setup_light(target, deg, cfg)
             for fi in frame_indices:
                 if idle_pose:
                     idle_idx = cfg.get("idle_frame_index")
                     af = idle_idx if idle_idx is not None else end
                 else:
-                    af = sample_frame(fi, start, length)
+                    af = sample_frame(fi, start, end)
                 bpy.context.scene.frame_set(math.floor(af), subframe=af % 1.0)
                 bpy.context.scene.render.filepath = os.path.join(out_dir, f"{name}_{fi:02d}.png")
                 bpy.ops.render.render(write_still=True)
@@ -299,7 +363,9 @@ def do_inspect(model):
     start, end = anim_range(objs)
     log("FRAMEMILL: INSPECT " + json.dumps(
         {"frame_start": int(start), "frame_end": int(end),
-         "fps": int(bpy.context.scene.render.fps)}))
+         "fps": int(bpy.context.scene.render.fps),
+         "action": first_action_name(objs),
+         "duration_frames": int(end) - int(start)}))
 
 
 def main():
