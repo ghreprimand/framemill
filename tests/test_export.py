@@ -93,3 +93,43 @@ def test_presets_all_save(tmp_path: Path):
     for key, preset in export.EXPORT_PRESETS.items():
         p = export.save(_sprite(), tmp_path / key, preset.config)
         assert p.exists()
+
+
+def test_dilation_does_not_wrap_image_edges():
+    im = Image.new("RGBA", (8, 8), (0, 0, 0, 0))
+    im.putpixel((0, 4), (255, 0, 0, 255))
+    out = export.dilate_edges(im, 1)
+    assert out.getpixel((1, 4)) == (255, 0, 0, 0)
+    assert out.getpixel((7, 4)) == (0, 0, 0, 0)
+
+
+def test_ordered_dither_preserves_exact_colour_key():
+    # Nearby palette colours would otherwise dither the magenta background.
+    cfg = ExportConfig(depth=8, background="magic_pink", dither="ordered",
+                       palette_source="fixed", fixed_palette=[(255, 0, 255), (240, 0, 240), (200, 30, 30)])
+    source = _sprite()
+    out = export.process(source, cfg).convert("RGB")
+    for y in range(8):
+        for x in range(8):
+            if source.getpixel((x, y))[3] == 0:
+                assert out.getpixel((x, y)) == (255, 0, 255)
+
+
+def test_solid_background_is_opaque_and_blends_soft_edges():
+    source = Image.new("RGBA", (2, 2), (255, 0, 0, 128))
+    source.putpixel((0, 0), (0, 0, 0, 0))
+    out = export.process(source, ExportConfig(background="solid", solid_color="#0000ff"))
+    assert out.getpixel((0, 0)) == (0, 0, 255, 255)
+    assert out.getpixel((1, 1)) == (128, 0, 127, 255)
+
+
+def test_missing_custom_palette_is_not_silently_adaptive():
+    import pytest
+    with pytest.raises(ValueError, match="palette file"):
+        export.process(_sprite(), ExportConfig(depth=8, background="magic_pink", palette_source="file"))
+
+
+def test_unsupported_transparency_combination_is_explicit():
+    import pytest
+    with pytest.raises(ValueError, match="32-bit PNG or TGA"):
+        export.process(_sprite(), ExportConfig(format="bmp", depth=8, background="transparent"))

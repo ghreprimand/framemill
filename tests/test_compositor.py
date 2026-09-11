@@ -1,6 +1,7 @@
 """Blender-free tests for the compositor (crop/resize/tile + TGA header)."""
 from pathlib import Path
 
+import pytest
 from PIL import Image
 
 from framemill.compositor import build_sheet, encode_tga
@@ -23,12 +24,12 @@ def test_sheet_dimensions(tmp_path: Path) -> None:
     assert sheet.size == (96 * 4, 128 * 8)
 
 
-def test_missing_frame_is_transparent(tmp_path: Path) -> None:
+def test_missing_frame_reports_incomplete_render(tmp_path: Path) -> None:
     s = RenderSettings(angles=4, frames=4)
     _fake_frames(tmp_path, s)
     (tmp_path / "S_00.png").unlink()  # drop one frame
-    sheet = build_sheet(tmp_path, s)
-    assert sheet.getpixel((0, 0))[3] == 0  # top-left frame slot stays transparent
+    with pytest.raises(FileNotFoundError, match="S_00.png"):
+        build_sheet(tmp_path, s)
 
 
 def test_tga_header_bottom_origin(tmp_path: Path) -> None:
@@ -41,7 +42,6 @@ def test_tga_header_bottom_origin(tmp_path: Path) -> None:
 
 
 def test_tga_magic_pink(tmp_path: Path) -> None:
-    s = RenderSettings(angles=1, frames=1, frame_width=4, frame_height=4)
     sheet = Image.new("RGBA", (4, 4), (0, 0, 0, 0))  # fully transparent
     data = encode_tga(sheet, magic_pink=True)
     body = data[18:]
@@ -57,18 +57,26 @@ def test_layout_axis_cols(tmp_path: Path) -> None:
     assert sheet.size == (96 * 8, 128 * 4)
 
 
-def test_start_direction_reorders_rows(tmp_path: Path) -> None:
-    from framemill.settings import build_layout
-    from PIL import Image
+@pytest.mark.parametrize("axis", ["rows", "cols"])
+def test_north_clockwise_sheet_uses_compass_order(tmp_path: Path, axis: str) -> None:
     s = RenderSettings(angles=8, frames=1, start_direction="N", rotation="cw",
-                       frame_width=4, frame_height=4, render_width=4, render_height=4)
-    # Tag each direction's frame with a unique red value so we can identify rows.
-    names = [n for n, _ in build_layout(8, "S", "cw")]  # canonical set
-    for i, d in enumerate(build_layout(8, "N", "cw")):
-        name = d[0]
-        Image.new("RGBA", (4, 4), (i * 10, 0, 0, 255)).save(tmp_path / f"{name}_00.png")
+                       layout_axis=axis, frame_width=4, frame_height=4)
+    expected = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"]
+    # Tag files independently of the layout implementation.
+    for i, name in enumerate(expected):
+        Image.new("RGBA", (4, 4), (i * 20, 0, 0, 255)).save(tmp_path / f"{name}_00.png")
     sheet = build_sheet(tmp_path, s)
-    # Row 0 must be 'N' (start), row 1 'NW' for cw
-    assert [n for n, _ in build_layout(8, "N", "cw")][0] == "N"
-    assert sheet.getpixel((0, 0))[0] == 0        # row0 tagged i=0
-    assert sheet.getpixel((0, 4))[0] == 10       # row1 tagged i=1
+    for i in range(8):
+        xy = (0, i * 4) if axis == "rows" else (i * 4, 0)
+        assert sheet.getpixel(xy)[0] == i * 20
+
+
+@pytest.mark.parametrize("angles,start", [(8, "S"), (8, "N"), (4, "E"), (1, "S")])
+def test_preview_reads_actual_first_direction(tmp_path, angles, start):
+    from framemill.compositor import build_preview
+    s = RenderSettings(angles=angles, start_direction=start, frame_width=8, frame_height=8)
+    name = s.direction_layout()[0][0]
+    Image.new("RGBA", (16, 16), (240, 80, 20, 255)).save(tmp_path / f"{name}_00.png")
+    preview = build_preview(tmp_path, s)
+    assert preview.size == (8, 8)
+    assert preview.getpixel((4, 4)) == (240, 80, 20, 255)

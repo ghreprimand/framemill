@@ -11,10 +11,10 @@ package manager; `pyproject.toml` is the source of truth for dependencies.
 ```bash
 python3 -m venv .venv
 . .venv/bin/activate        # Windows: .venv\Scripts\activate
-pip install -e ".[dev]"     # framemill + Flet, Pillow, pytest, ruff
+pip install -e ".[dev]"     # framemill + Flet, Pillow, NumPy, pytest, ruff
 
 framemill                    # launch the GUI
-pytest -q                    # compositor tests (no Blender needed)
+pytest -q                    # unit tests (no Blender needed)
 ruff check .
 ```
 
@@ -23,7 +23,9 @@ Blender is **not** a pip dependency — install it separately from
 
 ## Testing changes that touch rendering
 
-The compositor is covered by Blender-free tests. Changes to
+Compositing, export, direction layout, preview settings and sampling logic have
+Blender-free tests. Sampling tests use doubles; they do not validate Blender's
+actual mesh deformation, materials or camera output. Changes to
 `framemill/blender/render_sprites.py` need a manual check against a real model —
 please note in your PR which Blender version and model you tested with.
 

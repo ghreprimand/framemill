@@ -6,9 +6,8 @@ import sys
 import tempfile
 from pathlib import Path
 
-from . import blender
-from .settings import PRESETS, DEFAULT_PRESET, RenderSettings
-from . import compositor
+from . import blender, compositor
+from .settings import DEFAULT_PRESET, PRESETS, RenderSettings
 
 
 def _resolve_blender(explicit: str | None) -> str:
@@ -64,7 +63,7 @@ def main(argv: list[str] | None = None) -> None:
     r.add_argument("--preset", choices=list(PRESETS), default=DEFAULT_PRESET)
     r.add_argument("--angles", type=int, choices=[1, 4, 8, 16])
     r.add_argument("--frames", type=int)
-    r.add_argument("--idle", help="optional idle/standing model for frame 0")
+    r.add_argument("--idle", help="advanced: replace frame 0 with a second model pose; keeps total count, no blending")
     r.add_argument("--format", default="png", help="comma list: png,tga")
     r.add_argument("--magic-pink", action="store_true", help="TGA: transparent -> magenta (legacy engines)")
     r.set_defaults(func=_cmd_render)

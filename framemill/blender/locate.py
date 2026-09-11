@@ -45,7 +45,7 @@ def find_blender() -> str | None:
 def blender_version(blender_path: str) -> str | None:
     try:
         out = subprocess.run(
-            [blender_path, "--version"], capture_output=True, text=True, timeout=20
+            [blender_path, "--version"], capture_output=True, text=True, timeout=20, check=False
         )
         first = out.stdout.strip().splitlines()[0] if out.stdout else ""
         return first or None

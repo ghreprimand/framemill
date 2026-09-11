@@ -7,14 +7,13 @@ tested without Blender.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Optional, Tuple
 
 import numpy as np
 from PIL import Image
 
-RGB = Tuple[int, int, int]
+RGB = tuple[int, int, int]
 MAGENTA: RGB = (255, 0, 255)
 
 # 4x4 Bayer matrix (normalised 0..1) for ordered dithering.
@@ -37,9 +36,9 @@ class ExportConfig:
     dilate: int = 0                     # edge-bleed iterations (pixels)
     dither: str = "none"                # none | ordered | floyd
     palette_source: str = "auto"        # auto | file | fixed
-    palette_path: Optional[str] = None
+    palette_path: str | None = None
     palette_colors: int = 256           # for auto
-    fixed_palette: Optional[List[RGB]] = None
+    fixed_palette: list[RGB] | None = None
 
 
 # ----------------------------------------------------------------- colour utils
@@ -72,6 +71,14 @@ def dilate_edges(img: Image.Image, iterations: int) -> Image.Image:
         for dy, dx in ((-1, 0), (1, 0), (0, -1), (0, 1), (-1, -1), (-1, 1), (1, -1), (1, 1)):
             sv = np.roll(np.roll(valid, dy, 0), dx, 1)
             sr = np.roll(np.roll(rgb, dy, 0), dx, 1)
+            if dy > 0:
+                sv[:dy, :] = False
+            elif dy < 0:
+                sv[dy:, :] = False
+            if dx > 0:
+                sv[:, :dx] = False
+            elif dx < 0:
+                sv[:, dx:] = False
             acc += np.where(sv[:, :, None], sr, 0.0)
             cnt += sv
         fill = (~valid) & (cnt > 0)
@@ -99,10 +106,10 @@ def flatten(img: Image.Image, key: RGB) -> Image.Image:
 
 
 # ----------------------------------------------------------------- palettes
-def load_palette(path: str) -> List[RGB]:
+def load_palette(path: str) -> list[RGB]:
     """Parse a GIMP .gpl, JASC .pal, or plain hex/rgb list."""
     text = Path(path).read_text(errors="ignore").splitlines()
-    colors: List[RGB] = []
+    colors: list[RGB] = []
     lower = path.lower()
     if lower.endswith(".gpl"):
         for line in text:
@@ -139,21 +146,25 @@ def load_palette(path: str) -> List[RGB]:
     return colors[:256]
 
 
-def _palette_image(colors: List[RGB]) -> Image.Image:
-    flat: List[int] = []
+def _palette_image(colors: list[RGB]) -> Image.Image:
+    flat: list[int] = []
     for c in colors[:256]:
         flat.extend(c)
-    flat += [0, 0, 0] * (256 - len(colors))
+    flat += list(colors[-1]) * (256 - len(colors))
     pal = Image.new("P", (1, 1))
     pal.putpalette(flat)
     return pal
 
 
-def _resolve_palette(rgb: Image.Image, cfg: ExportConfig, key: Optional[RGB]) -> List[RGB]:
-    if cfg.palette_source == "file" and cfg.palette_path:
+def _resolve_palette(rgb: Image.Image, cfg: ExportConfig, key: RGB | None) -> list[RGB]:
+    if cfg.palette_source == "file":
+        if not cfg.palette_path:
+            raise ValueError("Choose a palette file first.")
         colors = load_palette(cfg.palette_path)
-    elif cfg.palette_source == "fixed" and cfg.fixed_palette:
-        colors = list(cfg.fixed_palette)
+    elif cfg.palette_source == "fixed":
+        if not cfg.fixed_palette:
+            raise ValueError("Enter at least one fixed palette colour.")
+        colors = [tuple(c) for c in cfg.fixed_palette]
     else:  # auto — adaptive palette from the image
         q = rgb.quantize(colors=min(cfg.palette_colors, 256), dither=Image.Dither.NONE)
         pal = q.getpalette() or []
@@ -163,7 +174,7 @@ def _resolve_palette(rgb: Image.Image, cfg: ExportConfig, key: Optional[RGB]) ->
     return colors
 
 
-def to_indexed(rgb: Image.Image, cfg: ExportConfig, key: Optional[RGB]) -> Image.Image:
+def to_indexed(rgb: Image.Image, cfg: ExportConfig, key: RGB | None) -> Image.Image:
     colors = _resolve_palette(rgb, cfg, key)
     palimg = _palette_image(colors)
     if cfg.dither == "floyd":
@@ -201,17 +212,29 @@ def _tga(img: Image.Image, bits: int, magic_pink: bool = False) -> bytes:
 # ----------------------------------------------------------------- main entry
 def process(sheet: Image.Image, cfg: ExportConfig) -> Image.Image:
     """Apply the full pixel pipeline, returning a PIL image in final mode."""
+    if cfg.format not in ("png", "tga", "bmp") or cfg.depth not in (8, 24, 32):
+        raise ValueError("Choose a supported format and colour depth.")
+    if cfg.background not in ("transparent", "magic_pink", "solid"):
+        raise ValueError("Choose a supported background.")
+    if cfg.background == "transparent" and (cfg.depth != 32 or cfg.format == "bmp"):
+        raise ValueError("Transparent output requires 32-bit PNG or TGA. Use a colour key for indexed output.")
+    if cfg.format == "bmp" and cfg.depth == 32:
+        raise ValueError("Choose 24-bit or indexed 8-bit for BMP.")
+    if not 2 <= cfg.palette_colors <= 256:
+        raise ValueError("Palette size must be between 2 and 256 colours.")
     img = sheet.convert("RGBA")
     if cfg.dilate:
         img = dilate_edges(img, cfg.dilate)
     if cfg.alpha_mode == "hard":
         img = threshold_alpha(img, cfg.alpha_cutoff)
 
-    key: Optional[RGB] = None
+    key: RGB | None = None
     if cfg.background == "magic_pink":
         key = MAGENTA
     elif cfg.background == "solid":
         key = hex_to_rgb(cfg.solid_color)
+        backdrop = Image.new("RGBA", img.size, (*key, 255))
+        img = Image.alpha_composite(backdrop, img)
 
     if cfg.depth == 32 and cfg.background == "transparent":
         return img  # RGBA
@@ -227,7 +250,16 @@ def process(sheet: Image.Image, cfg: ExportConfig) -> Image.Image:
     rgb = flatten(img, fill)
     if cfg.depth == 24:
         return rgb
-    return to_indexed(rgb, cfg, key=fill)  # 8-bit indexed
+    indexed = to_indexed(rgb, cfg, key=fill)
+    # Dithering must never perturb the exact key in transparent pixels.
+    palette = indexed.getpalette()
+    key_index = next(i for i in range(256)
+                     if tuple(palette[i * 3:i * 3 + 3]) == fill)
+    pixels = np.array(indexed)
+    pixels[np.array(img)[:, :, 3] == 0] = key_index
+    result = Image.fromarray(pixels, "P")
+    result.putpalette(palette)
+    return result
 
 
 def save(sheet: Image.Image, out_path: Path, cfg: ExportConfig) -> Path:

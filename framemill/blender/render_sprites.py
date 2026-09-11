@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """framemill Blender render script (runs INSIDE Blender's Python).
 
     blender --background --python render_sprites.py -- \
@@ -8,13 +7,14 @@ Reads a JSON config produced from framemill.settings.RenderSettings and renders
 one PNG per (direction, frame) named "<DIR>_<NN>.png". All tuning values come
 from the config; nothing project-specific is hardcoded.
 """
-import bpy
-import mathutils
-import sys
-import os
 import json
 import math
+import os
+import sys
 from pathlib import Path
+
+import bpy
+import mathutils
 
 DIRECTIONS = {
     1: ["S"],
@@ -142,9 +142,9 @@ def setup_camera(center, size, angle_deg, cfg):
     dist = cfg.get("camera_distance", 2.52)
     pitch = cfg.get("camera_pitch", 90.0)
     a = math.radians(angle_deg)
-    obj.location = (center[0] + math.sin(a) * dist,
-                    center[1] - math.cos(a) * dist,
-                    center[2])
+    obj.location = (center[0] + math.sin(a) * dist * math.sin(math.radians(pitch)),
+                    center[1] - math.cos(a) * dist * math.sin(math.radians(pitch)),
+                    center[2] + dist * math.cos(math.radians(pitch)))
     obj.rotation_euler = (math.radians(pitch), 0, a)
     bpy.context.scene.camera = obj
 
@@ -166,7 +166,7 @@ def setup_light(center, angle_deg, cfg):
 def pick_engine(name):
     try:
         avail = bpy.context.scene.render.bl_rna.properties["engine"].enum_items.keys()
-    except Exception:
+    except (AttributeError, TypeError):
         avail = []
     if name in avail:
         return name
@@ -192,8 +192,8 @@ def setup_render(cfg, preview):
     if hasattr(s, "eevee"):
         try:
             s.eevee.taa_render_samples = cfg.get("samples", 64)
-        except Exception:
-            pass
+        except (AttributeError, TypeError) as exc:
+            log(f"FRAMEMILL: sample setting unavailable: {exc}")
     # Colour management
     try:
         s.view_settings.view_transform = cfg.get("view_transform", "Standard")
@@ -224,6 +224,14 @@ def render_all(model, out_dir, cfg, idle=None, preview=False):
         n = cfg.get("angles", 8)
         names = DIRECTIONS.get(n, [f"angle{i}" for i in range(n)])
         full_layout = [[nm, -(360.0 / n) * i] for i, nm in enumerate(names)]
+        # These canonical camera angles correspond to counter-clockwise facings.
+        # Reorder entries, preserving the camera angle attached to each name.
+        if n in DIRECTIONS:
+            if cfg.get("rotation", "cw") == "cw":
+                full_layout = full_layout[:1] + full_layout[1:][::-1]
+            start = cfg.get("start_direction", "S")
+            first = next((i for i, (name, _) in enumerate(full_layout) if name == start), 0)
+            full_layout = full_layout[first:] + full_layout[:first]
 
     if preview:
         layout = [full_layout[0]]
@@ -246,12 +254,15 @@ def render_all(model, out_dir, cfg, idle=None, preview=False):
             frac = (1.0 - frac) % 1.0
         return start + frac * length
 
-    def render_from(path, frame_indices, ref=None):
+    def render_from(path, frame_indices, ref=None, idle_pose=False):
         clear_scene()
         objs = import_model(path)
         adjust_materials(cfg)
-        start = cfg.get("anim_start_override") or anim_range(objs)[0]
-        end = cfg.get("anim_end_override") or anim_range(objs)[1]
+        start, end = anim_range(objs)
+        if cfg.get("anim_start_override") is not None:
+            start = cfg["anim_start_override"]
+        if cfg.get("anim_end_override") is not None:
+            end = cfg["anim_end_override"]
         center, size = ref if ref else max_bounds(objs, start, end)
         setup_render(cfg, preview)
         length = end - start
@@ -260,12 +271,12 @@ def render_all(model, out_dir, cfg, idle=None, preview=False):
             setup_camera(center, size, deg, cfg)
             setup_light(center, deg, cfg)
             for fi in frame_indices:
-                if len(frame_indices) == 1 and length > 0:
+                if idle_pose:
                     idle_idx = cfg.get("idle_frame_index")
                     af = idle_idx if idle_idx is not None else end
                 else:
                     af = sample_frame(fi, start, length)
-                bpy.context.scene.frame_set(int(af))
+                bpy.context.scene.frame_set(math.floor(af), subframe=af % 1.0)
                 bpy.context.scene.render.filepath = os.path.join(out_dir, f"{name}_{fi:02d}.png")
                 bpy.ops.render.render(write_still=True)
                 counter += 1
@@ -274,9 +285,9 @@ def render_all(model, out_dir, cfg, idle=None, preview=False):
         return center, size
 
     render_from.counter = 0
-    if idle and not preview:
-        ref = render_from(model, list(range(1, frames)))
-        render_from(idle, [0], ref=ref)
+    if idle:
+        ref = render_from(model, [] if preview else list(range(1, frames)))
+        render_from(idle, [0], ref=ref, idle_pose=True)
     else:
         render_from(model, list(range(frames)))
     log("FRAMEMILL: COMPLETE")

@@ -5,8 +5,8 @@ Pure Pillow: centre-crop to target aspect, Lanczos downscale, tile, encode.
 """
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable, List, Optional
 
 from PIL import Image
 
@@ -30,8 +30,17 @@ def _crop_to_aspect(img: Image.Image, target_w: int, target_h: int) -> Image.Ima
     return img.crop((x, y, x + crop_w, y + crop_h))
 
 
+def build_preview(frames_dir: Path, settings: RenderSettings) -> Image.Image:
+    """Read the first rendered direction without changing its filename/layout."""
+    name = settings.direction_layout()[0][0]
+    with Image.open(frames_dir / f"{name}_00.png") as source:
+        return _crop_to_aspect(source.convert("RGBA"), settings.frame_width,
+                               settings.frame_height).resize(
+            (settings.frame_width, settings.frame_height), Image.Resampling.LANCZOS)
+
+
 def build_sheet(frames_dir: Path, settings: RenderSettings,
-                progress: Optional[ProgressFn] = None) -> Image.Image:
+                progress: ProgressFn | None = None) -> Image.Image:
     dirs = [name for name, _ in settings.direction_layout()]
     fw, fh = settings.frame_width, settings.frame_height
     n = len(dirs)
@@ -57,7 +66,7 @@ def build_sheet(frames_dir: Path, settings: RenderSettings,
             if progress:
                 progress(done, total, f"Stitching {direction} {fi + 1}/{settings.frames}")
             if not fpath.exists():
-                continue
+                raise FileNotFoundError(f"Render is incomplete: missing {fpath.name}")
             frame = Image.open(fpath).convert("RGBA")
             if frame.size != (fw, fh):
                 frame = _crop_to_aspect(frame, fw, fh).resize((fw, fh), Image.LANCZOS)
@@ -91,10 +100,10 @@ def save_tga(sheet: Image.Image, out_path: Path, magic_pink: bool = False) -> No
 
 
 def composite(frames_dir: Path, out_path: Path, settings: RenderSettings,
-              formats: List[str], magic_pink: bool = False,
-              progress: Optional[ProgressFn] = None) -> List[Path]:
+              formats: list[str], magic_pink: bool = False,
+              progress: ProgressFn | None = None) -> list[Path]:
     sheet = build_sheet(frames_dir, settings, progress=progress)
-    written: List[Path] = []
+    written: list[Path] = []
     stem = out_path.with_suffix("")
     if "png" in formats:
         p = stem.with_suffix(".png")

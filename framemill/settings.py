@@ -6,11 +6,11 @@ with defaults chosen to match the most common top-down/isometric setup.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, asdict
-from typing import List, Tuple
+from dataclasses import asdict, dataclass
 
-# Canonical clockwise rings and each name's camera azimuth (degrees).
-# Angle sign matches the render camera math (0 = South / facing camera).
+# Canonical counter-clockwise character facings and their camera azimuths.
+# Preserve name-to-camera mappings: orbiting the camera and turning the
+# character are opposite operations (0 = South / facing camera).
 _RINGS = {
     4: ["S", "E", "N", "W"],
     8: ["S", "SE", "E", "NE", "N", "NW", "W", "SW"],
@@ -20,19 +20,19 @@ _RINGS = {
 
 
 def _angle_for(count: int, index: int) -> float:
-    return -(360.0 / count) * index  # negative = clockwise
+    return -(360.0 / count) * index  # camera azimuth, not character rotation
 
 
 _ANGLES = {c: {name: _angle_for(c, i) for i, name in enumerate(ring)}
            for c, ring in _RINGS.items()}
 
 
-def direction_names(angles: int) -> List[str]:
+def direction_names(angles: int) -> list[str]:
     """Names only, in default clockwise-from-S order (compat helper)."""
-    return list(_RINGS.get(angles, [f"angle{i}" for i in range(angles)]))
+    return [name for name, _ in build_layout(angles)]
 
 
-def build_layout(angles: int, start: str = "S", rotation: str = "cw") -> List[Tuple[str, float]]:
+def build_layout(angles: int, start: str = "S", rotation: str = "cw") -> list[tuple[str, float]]:
     """Ordered [(name, camera_angle_deg)] honouring start direction + rotation.
 
     Each name keeps its canonical azimuth so the camera is always placed
@@ -42,7 +42,7 @@ def build_layout(angles: int, start: str = "S", rotation: str = "cw") -> List[Tu
     if not ring:
         return [(f"angle{i}", _angle_for(angles, i)) for i in range(angles)]
     order = list(ring)
-    if rotation == "ccw":
+    if rotation == "cw":
         order = [order[0]] + order[1:][::-1]
     if start in order:
         i = order.index(start)
@@ -107,11 +107,11 @@ class RenderSettings:
         return asdict(self)
 
     @classmethod
-    def from_dict(cls, data: dict) -> "RenderSettings":
+    def from_dict(cls, data: dict) -> RenderSettings:
         known = set(cls.__dataclass_fields__)  # type: ignore[attr-defined]
         return cls(**{k: v for k, v in data.items() if k in known})
 
-    def direction_layout(self) -> List[Tuple[str, float]]:
+    def direction_layout(self) -> list[tuple[str, float]]:
         return build_layout(self.angles, self.start_direction, self.rotation)
 
     def render_config(self) -> dict:
