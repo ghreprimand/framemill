@@ -83,7 +83,8 @@ ANIMATION_STEPS: list[Step] = [
         "recenter control to reset the view transform. Facing buttons request "
         "another Blender preview, or switch instantly within a rendered sheet. "
         "These are viewing controls; export framing and order stay unchanged. "
-        "Use Camera settings and render again to change the output framing.",
+        "Camera, lighting, orientation and timing refresh the preview after a "
+        "short pause. Render sheet still replaces the exportable sheet."
     ),
     Step(
         "How frames are sampled",

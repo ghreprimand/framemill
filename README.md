@@ -75,7 +75,8 @@ resets pan and gesture zoom, while **Base size** sets the underlying display siz
 Facing buttons request another Blender view before a sheet is rendered, and switch
 instantly between rendered directions afterward. New sources start facing South.
 These viewer controls do not change sheet ordering, sprite framing, or export
-pixels. Use the Camera settings and render again to change output framing.
+pixels. Camera, lighting, orientation and timing refresh the preview after a
+short pause; **Render sheet** still replaces the exportable sheet.
 The viewer displays rendered sprites rather than a freely orbitable 3D model.
 
 For a local browser preview of the same interface:

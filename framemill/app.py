@@ -15,6 +15,7 @@ from PIL import Image
 
 from . import appconfig, blender, compositor, export, guide, recipe
 from .export import DEFAULT_EXPORT, EXPORT_PRESETS, ExportConfig
+from .preview_schedule import PREVIEW_DEBOUNCE_S, after_render_job, user_cancel
 from .settings import PRESETS, RenderSettings, direction_names, next_playback_frame
 
 BG = "#101213"
@@ -84,6 +85,23 @@ def main(page: ft.Page) -> None:
     view = "sprite"
     zoom = 3
     fps = 8
+    resize_dialog = None
+    preview_seq = 0
+    pending_preview = False
+    pending_sheet = False
+    last_sheet = None
+    last_sheet_settings = None
+    last_sheet_source = ""
+    last_sheet_detected: dict = {}
+    PREVIEW_FIELDS = {
+        "camera_pitch", "ortho_scale_mult", "camera_distance", "framing_mode",
+        "framing_scale", "framing_origin_x", "framing_origin_y", "framing_origin_z",
+        "anchor", "output_offset_x", "output_offset_y", "light_energy", "light_color",
+        "shadow_soft_size", "ambient_color", "ambient_strength", "view_transform",
+        "look", "exposure", "gamma", "specular_ior", "source_yaw", "loop_mode",
+        "phase_offset", "reverse", "anim_start_override", "anim_end_override",
+        "frames", "frame_width", "frame_height", "samples", "engine",
+    }
     detected = {"frame_start": None, "frame_end": None, "fps": None,
                 "action": None, "duration_frames": None}
     result_detected: dict = {}
@@ -106,7 +124,8 @@ def main(page: ft.Page) -> None:
                                         color={ft.ControlState.DEFAULT: INK if primary else TEXT,
                                                ft.ControlState.DISABLED: FAINT},
                                         shape=ft.RoundedRectangleBorder(radius=8),
-                                        side=ft.BorderSide(0 if primary else 1, BORDER)), **kwargs)
+                                        side=ft.BorderSide(0 if primary else 1, BORDER),
+                                        text_style=ft.TextStyle(size=12)), **kwargs)
 
     def field(label, value, on_change, width=None, **kwargs):
         return ft.TextField(label=label, value=str(value), on_change=on_change or (lambda e: None), width=width,
@@ -115,7 +134,9 @@ def main(page: ft.Page) -> None:
                             border_radius=7, **kwargs)
 
     def dropdown(label, value, options, callback, width=None, **kwargs):
-        return ft.Dropdown(label=label, value=str(value), width=width if width is not None else (None if kwargs.get("expand") else 270), text_size=12,
+        if width is None and not kwargs.get("expand"):
+            width = 270
+        return ft.Dropdown(label=label, value=str(value), width=width, text_size=12,
                            filled=True, fill_color=BG, border_color=BORDER, border_radius=7,
                            content_padding=ft.Padding(12, 10, 10, 10),
                            options=[ft.dropdown.Option(str(k), str(v)) for k, v in options],
@@ -154,7 +175,7 @@ def main(page: ft.Page) -> None:
     result_badge = text("WORKSPACE", 10, ACCENT, ft.FontWeight.W_600)
     dimensions = text("—", 11, MUTED)
     frame_label = text("FRAME  — / —", 10, MUTED)
-    direction_buttons = ft.Row(spacing=5, wrap=True)
+    direction_buttons = ft.Row(spacing=5, wrap=True, expand=True)
     timeline = ft.Row(spacing=8, scroll=ft.ScrollMode.AUTO)
     sprite_image = ft.Image(src=b"", fit=ft.BoxFit.CONTAIN, gapless_playback=True,
                             filter_quality=ft.FilterQuality.NONE, visible=False)
@@ -197,15 +218,17 @@ def main(page: ft.Page) -> None:
         gesture_zoom = 1.0
         apply_view_transform()
 
+    empty_icon = ft.Container(ft.Icon(ft.Icons.VIEW_IN_AR_OUTLINED, size=36, color=ACCENT),
+                              padding=20, bgcolor="#242e23", border_radius=20)
+    empty_tagline = text("RENDERED WITH BLENDER  /  BUILT FOR GAMES", 9, FAINT)
     empty = ft.Column([
-        ft.Container(ft.Icon(ft.Icons.VIEW_IN_AR_OUTLINED, size=42, color=ACCENT),
-                     padding=26, bgcolor="#242e23", border_radius=24),
+        empty_icon,
         text("From model to motion", 25, TEXT, ft.FontWeight.W_600),
         text("Load an animated model to see your first sprite.\nFine-tune the look, build the sheet, then export.",
              13, MUTED, text_align=ft.TextAlign.CENTER),
         button("Choose a model", ft.Icons.ADD, lambda e: page.run_task(pick_source), True),
-        text("RENDERED WITH BLENDER  /  BUILT FOR GAMES", 9, FAINT),
-    ], spacing=20, alignment=ft.MainAxisAlignment.CENTER,
+        empty_tagline,
+    ], spacing=12, scroll=ft.ScrollMode.AUTO, alignment=ft.MainAxisAlignment.CENTER,
        horizontal_alignment=ft.CrossAxisAlignment.CENTER)
     viewport = ft.Container(content=empty, expand=True, alignment=CENTER, bgcolor="#151919",
         image=ft.DecorationImage(src="checker.png", repeat=ft.ImageRepeat.REPEAT),
@@ -215,20 +238,37 @@ def main(page: ft.Page) -> None:
         status.value = message
         page.update()
 
-    def mark_changed():
+    def mark_changed(preview=True):
         nonlocal stale, playing
-        stale = result is not None
+        stale = last_sheet is not None
         playing = False
         play_btn.icon = ft.Icons.PLAY_ARROW_ROUNDED
         result_badge.value = "CHANGES PENDING" if stale else "WORKSPACE"
         appearance_dd.value = appearance_key()
         persist()
         update_geometry()
+        if preview:
+            schedule_preview()
         page.update()
 
     def change(name, value):
         setattr(settings, name, value)
-        mark_changed()
+        mark_changed(preview=name in PREVIEW_FIELDS)
+
+    def schedule_preview():
+        nonlocal preview_seq
+        if not model or not bpath:
+            return
+        preview_seq += 1
+        seq = preview_seq
+
+        async def wait():
+            await asyncio.sleep(PREVIEW_DEBOUNCE_S)
+            if seq != preview_seq:
+                return
+            start_render(True, seq=seq)
+
+        page.run_task(wait)
 
     def integer(name, event):
         try:
@@ -296,7 +336,8 @@ def main(page: ft.Page) -> None:
                                     inactive_color=BORDER, on_change=update)], spacing=0)
 
     def section(label, controls):
-        return ft.Column([caption(label), *controls], spacing=12)
+        return ft.Column([caption(label), *controls], spacing=12,
+                         horizontal_alignment=ft.CrossAxisAlignment.STRETCH)
 
     def update_geometry():
         sw, sh = settings.sheet_size()
@@ -325,7 +366,7 @@ def main(page: ft.Page) -> None:
 
     geometry = text("", 10, ACCENT)
     layout_order = text("", 11, ACCENT)
-    inspector = ft.Column(spacing=20, scroll=ft.ScrollMode.AUTO, expand=True)
+    inspector = ft.Column(spacing=20, horizontal_alignment=ft.CrossAxisAlignment.STRETCH)
     inspector_tab = "look"
     tab_buttons = ft.Row(spacing=4)
 
@@ -346,25 +387,30 @@ def main(page: ft.Page) -> None:
                                    dropdown("Framing mode", settings.framing_mode,
                                             [("fit", "Fit this clip"), ("fixed", "Fixed world scale")],
                                             framing_mode_changed),
-                                   slider("Fit multiplier", "ortho_scale_mult", .5, 4, 70, "×"),
+                                   ft.Container(slider("Fit multiplier", "ortho_scale_mult", .5, 4, 70, "×"),
+                                                visible=settings.framing_mode == "fit"),
+                                   ft.Column([
                                    field("Fixed world scale", settings.framing_scale,
                                          lambda e: decimal("framing_scale", e),
                                          disabled=settings.framing_mode != "fixed"),
+                                   caption("World origin"),
                                    ft.Row([
-                                       field("Origin X", settings.framing_origin_x,
+                                       field("X", settings.framing_origin_x,
                                              lambda e: decimal("framing_origin_x", e), expand=True,
                                              disabled=settings.framing_mode != "fixed"),
-                                       field("Origin Y", settings.framing_origin_y,
+                                       field("Y", settings.framing_origin_y,
                                              lambda e: decimal("framing_origin_y", e), expand=True,
                                              disabled=settings.framing_mode != "fixed"),
-                                       field("Origin Z", settings.framing_origin_z,
+                                       field("Z", settings.framing_origin_z,
                                              lambda e: decimal("framing_origin_z", e), expand=True,
                                              disabled=settings.framing_mode != "fixed"),
                                    ], spacing=8),
+                                   ], visible=settings.framing_mode == "fixed", spacing=12,
+                                      horizontal_alignment=ft.CrossAxisAlignment.STRETCH),
                                    dropdown("Anchor", settings.anchor,
                                             [("center", "Bounds centre"), ("feet", "Feet / lowest point")],
                                             lambda v: change("anchor", v),
-                                            disabled=settings.framing_mode == "fixed"),
+                                            visible=settings.framing_mode != "fixed"),
                                    ft.Row([
                                        field("Offset X · px", settings.output_offset_x,
                                              lambda e: signed_int("output_offset_x", e), expand=True),
@@ -374,7 +420,9 @@ def main(page: ft.Page) -> None:
                                    text("Fixed scale and origin are world units and stay identical across clips. "
                                         "Fit mode may use this clip's bounds. Output offsets are finished-cell "
                                         "pixels (+X right, +Y down). Viewer pan/zoom is display-only.", 11, MUTED),
-                                   slider("Orbit distance", "camera_distance", .5, 10, 95)]),
+                                   slider("Orbit distance · camera and light", "camera_distance", .5, 10, 95),
+                                   text("Orbit distance is not zoom: it places the camera and the light. "
+                                        "Use Framing or Fixed world scale to change how large the character is.", 11, MUTED)]),
                 section("Light & environment", [slider("Light energy", "light_energy", 0, 3000, 60),
                     slider("Softness", "shadow_soft_size", 0, 2, 40),
                     field("Light colour", settings.light_color, lambda e: color_change("light_color", e)),
@@ -404,8 +452,8 @@ def main(page: ft.Page) -> None:
                     text("Sheet order only changes cell sequence. It does not rotate the mesh.", 11, MUTED)]),
                 section("Source facing", [
                     ft.Row([
-                        button("Left 90°", ft.Icons.ROTATE_LEFT, lambda e: nudge_yaw(90)),
-                        button("Right 90°", ft.Icons.ROTATE_RIGHT, lambda e: nudge_yaw(-90)),
+                        button("Left 90°", ft.Icons.ROTATE_LEFT, lambda e: nudge_yaw(90), expand=True),
+                        button("Right 90°", ft.Icons.ROTATE_RIGHT, lambda e: nudge_yaw(-90), expand=True),
                     ], spacing=8),
                     field("Yaw · degrees", settings.source_yaw, lambda e: decimal("source_yaw", e)),
                     text("Rotates the imported source (and its animation) around world Z. "
@@ -456,7 +504,7 @@ def main(page: ft.Page) -> None:
         if settings.start_direction not in [n for n, _ in settings.direction_layout()]:
             settings.start_direction = "S"
         build_inspector()
-        mark_changed()
+        mark_changed(preview=False)
 
     def loop_mode_changed(value):
         settings.loop_mode = value
@@ -516,7 +564,7 @@ def main(page: ft.Page) -> None:
         mark_changed()
 
     async def pick_source(for_idle=False):
-        if busy:
+        if busy and not is_preview:
             return
         if page.web:
             path_field = field("Absolute path on this computer", "", None, width=500,
@@ -544,6 +592,7 @@ def main(page: ft.Page) -> None:
 
     def set_source(path, for_idle=False):
         nonlocal model, idle, result, result_settings, playing, preview_facing, view, view_reset_pending
+        nonlocal last_sheet, last_sheet_settings, last_sheet_source
         if for_idle:
             idle = path
             idle_name.value = Path(path).name
@@ -555,6 +604,9 @@ def main(page: ft.Page) -> None:
             view = "sprite"
             sprite_tab.bgcolor, sheet_tab.bgcolor = "#303a2a", PANEL
             result = result_settings = None
+            last_sheet = last_sheet_settings = None
+            last_sheet_source = ""
+            last_sheet_detected.clear()
             playing = False
             model_name.value = Path(path).name
             model_detail.value = f"{Path(path).suffix[1:].upper()}  ·  {Path(path).stat().st_size / 1024**2:.1f} MB"
@@ -636,12 +688,18 @@ def main(page: ft.Page) -> None:
         notify(f"Loaded recipe {Path(path).name}")
 
     def show_result(rebuild_strip=False):
-        if result is None or result_settings is None:
+        sheet_view = view == "sheet" and last_sheet is not None and last_sheet_settings is not None
+        playing_sheet = playing and last_sheet is not None and last_sheet_settings is not None
+        use_sheet = sheet_view or playing_sheet
+        display = last_sheet if use_sheet else result
+        display_settings = last_sheet_settings if use_sheet else result_settings
+        previewing = is_preview and not use_sheet
+        if display is None or display_settings is None:
             return
         empty.visible = False
         sprite_image.visible = True
         viewport.content = viewer
-        img = result if view == "sheet" or is_preview else frame_at(result, result_settings, direction, frame)
+        img = display if previewing or sheet_view else frame_at(display, display_settings, direction, frame)
         sprite_image.src = png_bytes(img)
         if view == "sheet":
             sprite_image.width = sprite_image.height = None
@@ -650,15 +708,15 @@ def main(page: ft.Page) -> None:
             sprite_image.expand = False
             sprite_image.width = img.width * zoom
             sprite_image.height = img.height * zoom
-        count = 1 if is_preview else result_settings.frames
+        count = 1 if previewing else display_settings.frames
         frame_label.value = f"FRAME  {frame + 1:02d} / {count:02d}"
         dimensions.value = f"{img.width} × {img.height} px  ·  RGBA"
         if rebuild_strip:
             direction_buttons.controls = []
-            names = [n for n, _ in result_settings.direction_layout()]
-            if is_preview:
+            names = [n for n, _ in display_settings.direction_layout()]
+            if previewing:
                 names = direction_names(8)
-            selected_direction = names.index(result_settings.start_direction) if is_preview else direction
+            selected_direction = names.index(display_settings.start_direction) if previewing else direction
             for i, name in enumerate(names):
                 direction_buttons.controls.append(ft.Container(
                     text(name if name != "angle0" else "Front", 10, INK if i == selected_direction else MUTED),
@@ -667,7 +725,7 @@ def main(page: ft.Page) -> None:
                     on_click=lambda e, i=i: select_direction(i)))
             timeline.controls = []
             for i in range(count):
-                thumb = result if is_preview else frame_at(result, result_settings, direction, i)
+                thumb = display if previewing else frame_at(display, display_settings, direction, i)
                 timeline.controls.append(ft.Container(ft.Column([
                     ft.Image(src=png_bytes(thumb), width=42, height=54, fit=ft.BoxFit.CONTAIN,
                              filter_quality=ft.FilterQuality.NONE),
@@ -681,20 +739,22 @@ def main(page: ft.Page) -> None:
             for i, tile in enumerate(timeline.controls):
                 tile.border = ft.Border.all(1, ACCENT if i == frame else BORDER)
                 tile.bgcolor = "#2a3325" if i == frame else CARD
-        play_btn.disabled = is_preview or busy
-        export_btn.disabled = is_preview or busy
+        play_btn.disabled = busy or (previewing and last_sheet is None)
+        export_btn.disabled = last_sheet is None or busy
         page.update()
 
     def select_direction(value):
         nonlocal direction, preview_facing
         if busy:
             return
-        if is_preview:
+        if is_preview and not (view == "sheet" and last_sheet is not None):
             preview_facing = direction_names(8)[value]
-            start_render(True)
+            start_render(True)  # bumps preview_seq so a pending debounce cannot race this view
         else:
+            layout_settings = last_sheet_settings if last_sheet_settings is not None else result_settings
             direction = value
-            preview_facing = result_settings.direction_layout()[value][0]
+            if layout_settings is not None:
+                preview_facing = layout_settings.direction_layout()[value][0]
             show_result(True)
 
     def select_frame(value):
@@ -726,11 +786,13 @@ def main(page: ft.Page) -> None:
 
     async def animate(generation):
         nonlocal frame, playing
-        while playing and generation == play_generation and not busy and result_settings:
+        play_settings = last_sheet_settings or result_settings
+        while playing and generation == play_generation and not busy and play_settings:
             await asyncio.sleep(1 / fps)
-            if not playing or generation != play_generation or busy or not result_settings:
+            play_settings = last_sheet_settings or result_settings
+            if not playing or generation != play_generation or busy or not play_settings:
                 break
-            nxt = next_playback_frame(frame, result_settings.frames, result_settings.loop_mode)
+            nxt = next_playback_frame(frame, play_settings.frames, play_settings.loop_mode)
             if nxt is None:
                 playing = False
                 play_btn.icon = ft.Icons.PLAY_ARROW_ROUNDED
@@ -745,34 +807,55 @@ def main(page: ft.Page) -> None:
         playing = not playing
         play_btn.icon = ft.Icons.PAUSE_ROUNDED if playing else ft.Icons.PLAY_ARROW_ROUNDED
         if playing:
-            if (result_settings and result_settings.loop_mode == "oneshot"
-                    and frame >= result_settings.frames - 1):
+            play_settings = last_sheet_settings or result_settings
+            if (play_settings and play_settings.loop_mode == "oneshot"
+                    and frame >= play_settings.frames - 1):
                 frame = 0
             set_view("sprite")
+            show_result(True)
             page.run_task(animate, play_generation)
         page.update()
+
+    def cancel_render(e=None):
+        nonlocal preview_seq, pending_preview, pending_sheet
+        preview_seq, pending_preview, pending_sheet = user_cancel(preview_seq)
+        cancel.set()
 
     def disconnected(e):
         nonlocal playing
         playing = False
-        cancel.set()
+        cancel_render()
 
     page.on_disconnect = disconnected
 
-    def set_busy(value):
+    def set_busy(value, lock_sidebar=False):
         nonlocal busy
         busy = value
-        sidebar.disabled = value
-        direction_buttons.disabled = value
+        sidebar.disabled = value and lock_sidebar
+        direction_buttons.disabled = value and lock_sidebar
         preview_btn.disabled = render_btn.disabled = value
-        export_btn.disabled = value or result is None or is_preview
+        export_btn.disabled = value or last_sheet is None
         cancel_btn.visible = value
         progress.visible = value
-        play_btn.disabled = value or is_preview
+        play_btn.disabled = value or (is_preview and last_sheet is None)
 
-    def start_render(preview):
-        nonlocal playing
+    def start_render(preview, seq=None):
+        nonlocal playing, preview_seq, pending_preview, pending_sheet
+        if preview and seq is None:
+            preview_seq += 1
+            seq = preview_seq
+        if preview and seq is not None and seq != preview_seq:
+            return
+        if not preview:
+            preview_seq += 1
+            pending_preview = False
         if busy:
+            if preview:
+                pending_preview = True
+            else:
+                pending_sheet = True
+                pending_preview = False
+                cancel.set()
             return
         if not model:
             page.run_task(pick_source)
@@ -800,14 +883,16 @@ def main(page: ft.Page) -> None:
         playing = False
         play_btn.icon = ft.Icons.PLAY_ARROW_ROUNDED
         cancel.clear()
-        set_busy(True)
+        set_busy(True, lock_sidebar=not preview)
         progress.value = None
         notify("Preparing first sprite…" if preview else "Rendering directions and animation frames…")
         job = preview_settings(settings, preview_facing if preview_facing != "angle0" else "S") if preview else copy.deepcopy(settings)
-        page.run_thread(render_job, preview, job, model, idle, bpath)
+        page.run_thread(render_job, preview, job, model, idle, bpath, seq if preview else None)
 
-    def render_job(preview, job, source, idle_source, executable):
+    def render_job(preview, job, source, idle_source, executable, seq):
         nonlocal result, result_settings, result_source, is_preview, stale, direction, frame, view_reset_pending
+        nonlocal last_sheet, last_sheet_settings, last_sheet_source
+        nonlocal pending_preview, pending_sheet
 
         def update(p):
             progress.value = p.current / p.total if p.total else None
@@ -820,16 +905,28 @@ def main(page: ft.Page) -> None:
                 blender.render(executable, source, frames_dir, job, idle_path=idle_source,
                                preview=preview, on_progress=update, cancel=cancel)
                 image = compositor.build_preview(frames_dir, job) if preview else compositor.build_sheet(frames_dir, job)
+            if preview and seq is not None and seq != preview_seq:
+                return
             result, result_settings, result_source = image, job, source
             result_detected.clear()
             if model == source:
                 result_detected.update(detected)
-            is_preview, stale, direction, frame = preview, False, 0, 0
-            if not preview:
+            is_preview = preview
+            if preview:
+                stale = last_sheet is not None
+                direction, frame = 0, 0
+            else:
+                last_sheet = image.copy()
+                last_sheet_settings = job
+                last_sheet_source = source
+                last_sheet_detected.clear()
+                last_sheet_detected.update(result_detected)
+                stale, direction, frame = False, 0, 0
                 names = [name for name, _ in job.direction_layout()]
                 direction = names.index(preview_facing) if preview_facing in names else 0
-            result_badge.value = "SOURCE PREVIEW" if preview else "SHEET READY"
-            status.value = ("Preview ready. Facing buttons request another view; sheet order stays unchanged." if preview
+            result_badge.value = ("CHANGES PENDING" if preview and last_sheet is not None
+                                  else "SOURCE PREVIEW" if preview else "SHEET READY")
+            status.value = ("Preview updated. Render sheet to replace the exportable sheet." if preview
                             else "Sheet ready. Review the motion, then choose Export sprite sheet.")
             persist()
             show_result(True)
@@ -839,7 +936,18 @@ def main(page: ft.Page) -> None:
         except Exception as ex:  # noqa: BLE001 — report worker failures in the UI
             status.value = str(ex) if cancel.is_set() else f"Render failed: {ex}"
         finally:
+            action = after_render_job(
+                cancelled=cancel.is_set(),
+                pending_sheet=pending_sheet,
+                pending_preview=pending_preview,
+            )
+            pending_preview = False
+            pending_sheet = False
             set_busy(False)
+            if action == "start_sheet":
+                start_render(False)
+            elif action == "start_preview" and model and bpath:
+                start_render(True, seq=preview_seq)
             page.update()
 
     async def locate_blender():
@@ -872,21 +980,22 @@ def main(page: ft.Page) -> None:
             actions=[button("Back to workspace", ft.Icons.ARROW_BACK, lambda e: page.pop_dialog())]))
 
     def open_export(e):
-        nonlocal playing
-        if result is None or is_preview:
+        nonlocal playing, resize_dialog
+        if last_sheet is None or last_sheet_settings is None:
             return
         playing = False
         play_btn.icon = ft.Icons.PLAY_ARROW_ROUNDED
         draft = copy.deepcopy(export_cfg)
         selected_preset = next((k for k, preset in EXPORT_PRESETS.items()
                                 if preset.config == draft), "")
-        original = result.copy()
+        original = last_sheet.copy()
         export_image = ft.Image(src=png_bytes(original), fit=ft.BoxFit.CONTAIN, expand=True,
                                filter_quality=ft.FilterQuality.NONE)
         export_info = text("", 11, MUTED)
         export_error = text("", 11, "#f1ac91")
         palette_note = text(Path(draft.palette_path).name if draft.palette_path else "No palette selected", 11, MUTED)
-        export_controls = ft.Column(spacing=14, scroll=ft.ScrollMode.AUTO)
+        export_controls = ft.Column(spacing=14, scroll=ft.ScrollMode.AUTO, expand=True,
+                                    horizontal_alignment=ft.CrossAxisAlignment.STRETCH)
         dialog = None
 
         def normalize():
@@ -1022,12 +1131,13 @@ def main(page: ft.Page) -> None:
             nonlocal export_cfg
             try:
                 export.validate_config(draft)
-                filename = f"{Path(result_source).stem}_sheet.{draft.format}"
+                export_source = last_sheet_source or result_source
+                filename = f"{Path(export_source).stem}_sheet.{draft.format}"
                 meta = None
-                if draft.write_metadata and result_settings is not None:
-                    snap = result_detected or detected
+                if draft.write_metadata and last_sheet_settings is not None:
+                    snap = last_sheet_detected or detected
                     meta = recipe.animation_metadata(
-                        result_settings, clip_name=Path(result_source).name,
+                        last_sheet_settings, clip_name=Path(export_source).name,
                         source_start=snap.get("frame_start"),
                         source_end=snap.get("frame_end"),
                         source_fps=snap.get("fps") or None,
@@ -1045,7 +1155,7 @@ def main(page: ft.Page) -> None:
                     message = f"Export prepared: {filename}"
                 else:
                     destination = await picker.save_file(file_name=filename,
-                        initial_directory=str(Path(result_source).parent),
+                        initial_directory=str(Path(export_source).parent),
                         file_type=ft.FilePickerFileType.CUSTOM, allowed_extensions=[draft.format])
                     if not destination:
                         return
@@ -1064,20 +1174,41 @@ def main(page: ft.Page) -> None:
 
         save_btn = button("Export sprite sheet", ft.Icons.DOWNLOAD_ROUNDED, save_output, True)
         build_export_controls()
+        preview_panel = ft.Container(expand=5, padding=18, bgcolor=BG, border_radius=10,
+            content=ft.Column([caption("Export preview"),
+                ft.Container(export_image, expand=True, alignment=CENTER,
+                             image=ft.DecorationImage(src="checker.png", repeat=ft.ImageRepeat.REPEAT)),
+                export_info], spacing=10, expand=True,
+                              horizontal_alignment=ft.CrossAxisAlignment.STRETCH))
+        settings_panel = ft.Container(expand=4, padding=ft.Padding(0, 0, 14, 0),
+                                      content=export_controls)
+        dialog_body = ft.Container()
         dialog = ft.AlertDialog(bgcolor=PANEL, shape=ft.RoundedRectangleBorder(radius=16),
             title=ft.Row([ft.Column([text("Ready for your game.", 24, TEXT, ft.FontWeight.W_600),
-                                    text("Fine-tune the output. Your render stays untouched.", 12, MUTED)], spacing=6),
-                          ft.Container(expand=True), ft.IconButton(ft.Icons.CLOSE, on_click=lambda e: page.pop_dialog())]),
-            content=ft.Container(width=940, height=570, content=ft.Row([
-                ft.Container(expand=5, padding=18, bgcolor=BG, border_radius=10,
-                    content=ft.Column([caption("Export preview"),
-                        ft.Container(export_image, expand=True, alignment=CENTER,
-                                     image=ft.DecorationImage(src="checker.png", repeat=ft.ImageRepeat.REPEAT)),
-                        export_info, text("Exporting the last rendered sheet. Changes are pending." if stale else
-                                          "Updates as you change export settings. No Blender render needed.", 11, MUTED)], spacing=12)),
-                ft.Container(expand=4, content=export_controls, padding=ft.Padding(12, 0, 0, 0)),
-            ], spacing=16, vertical_alignment=ft.CrossAxisAlignment.STRETCH)),
+                                    text("Fine-tune the output. Your render stays untouched.", 12, MUTED)], spacing=6, expand=True), ft.IconButton(ft.Icons.CLOSE, on_click=lambda e: page.pop_dialog())]),
+            content=dialog_body,
             actions=[export_error, button("Cancel", ft.Icons.CLOSE, lambda e: page.pop_dialog()), save_btn])
+        def fit_export_dialog():
+            width, height = page.width or 1440, page.height or 940
+            wide = width >= 1100
+            dialog_body.width = min(940, max(320, width - 96))
+            dialog_body.height = min(570, max(280, height - 220))
+            preview_panel.expand = 5 if wide else False
+            preview_panel.height = None if wide else 140
+            preview_panel.width = None
+            settings_panel.expand = 4 if wide else True
+            settings_panel.width = None
+            settings_panel.padding = ft.Padding(0, 0, 14, 0) if wide else ft.Padding(0, 0, 0, 0)
+            if wide:
+                dialog_body.content = ft.Row(
+                    [preview_panel, settings_panel], spacing=16, expand=True,
+                    vertical_alignment=ft.CrossAxisAlignment.STRETCH)
+            else:
+                dialog_body.content = ft.Column(
+                    [preview_panel, settings_panel], spacing=16, expand=True,
+                    horizontal_alignment=ft.CrossAxisAlignment.STRETCH)
+        resize_dialog = fit_export_dialog
+        fit_export_dialog()
         page.show_dialog(dialog)
         refresh()
 
@@ -1088,8 +1219,9 @@ def main(page: ft.Page) -> None:
     frames_field = field("Frames", settings.frames, lambda e: integer("frames", e), expand=True)
     appearance_dd = dropdown("Appearance preset", appearance_key(),
         [(k, v.label) for k, v in PRESETS.items()] + [("custom", "Custom appearance")], choose_preset)
-    sidebar = ft.Container(width=310, bgcolor=PANEL, padding=20,
+    sidebar = ft.Container(width=310, bgcolor=PANEL, padding=ft.Padding(20, 20, 6, 20),
         border=ft.Border(right=ft.BorderSide(1, BORDER)), content=ft.Column([
+          ft.Container(padding=ft.Padding(0, 0, 14, 8), content=ft.Column([
             section("01 / Source", [ft.Container(ft.Row([
                 ft.Icon(ft.Icons.VIEW_IN_AR_OUTLINED, size=24, color=ACCENT),
                 ft.Column([model_name, model_detail], spacing=4, expand=True),
@@ -1098,8 +1230,8 @@ def main(page: ft.Page) -> None:
             ], spacing=12), bgcolor=CARD, padding=12, border_radius=9),
                 source_clip,
                 ft.Row([
-                    button("Load recipe", ft.Icons.FOLDER_OPEN, lambda e: page.run_task(pick_recipe, False)),
-                    button("Save recipe", ft.Icons.SAVE_OUTLINED, lambda e: page.run_task(pick_recipe, True)),
+                    button("Load recipe", ft.Icons.FOLDER_OPEN, lambda e: page.run_task(pick_recipe, False), expand=True),
+                    button("Save recipe", ft.Icons.SAVE_OUTLINED, lambda e: page.run_task(pick_recipe, True), expand=True),
                 ], spacing=8),
                 appearance_dd]),
             ft.Divider(color=BORDER, height=1),
@@ -1107,11 +1239,13 @@ def main(page: ft.Page) -> None:
                 ft.Row([dropdown("Directions", settings.angles, [(n, str(n)) for n in (1, 4, 8, 16)],
                                  angles_changed, expand=True), frames_field], spacing=10), geometry]),
             ft.Divider(color=BORDER, height=1), tab_buttons, inspector,
-        ], spacing=18, expand=True))
+          ], spacing=18, horizontal_alignment=ft.CrossAxisAlignment.STRETCH)),
+        ], scroll=ft.ScrollMode.AUTO, expand=True,
+           horizontal_alignment=ft.CrossAxisAlignment.STRETCH))
     preview_btn = button("Preview", ft.Icons.VISIBILITY_OUTLINED, lambda e: start_render(True))
     render_btn = button("Render sheet", ft.Icons.GRID_VIEW_ROUNDED, lambda e: start_render(False))
     export_btn = button("Export sprite sheet", ft.Icons.NORTH_EAST, open_export, True, disabled=True)
-    cancel_btn = button("Cancel render", ft.Icons.CLOSE, lambda e: cancel.set(), visible=False)
+    cancel_btn = button("Cancel render", ft.Icons.CLOSE, cancel_render, visible=False)
     play_btn = ft.IconButton(ft.Icons.PLAY_ARROW_ROUNDED, icon_color=ACCENT, bgcolor="#303a2a",
                              on_click=toggle_play, disabled=True, tooltip="Play / pause animation")
     sprite_tab = ft.Container(text("Sprite", 11), bgcolor="#303a2a", padding=ft.Padding(15, 9, 15, 9),
@@ -1119,18 +1253,23 @@ def main(page: ft.Page) -> None:
     sheet_tab = ft.Container(text("Sheet", 11), bgcolor=PANEL, padding=ft.Padding(15, 9, 15, 9),
                              border_radius=6, on_click=lambda e: set_view("sheet"))
     workspace = ft.Container(expand=True, padding=ft.Padding(28, 25, 28, 18), content=ft.Column([
-        ft.Row([ft.Column([result_badge, headline, subtitle], spacing=7, expand=True),
-                preview_btn, render_btn], spacing=10),
-        ft.Row([ft.Row([sprite_tab, sheet_tab], spacing=3), ft.Container(expand=True),
-                ft.IconButton(ft.Icons.CENTER_FOCUS_STRONG, icon_size=18, icon_color=MUTED,
+        ft.ResponsiveRow([
+            ft.Column([result_badge, headline, subtitle], spacing=7, col={"xs": 12, "wide": 7}),
+            ft.Row([preview_btn, render_btn], spacing=8,
+                   alignment=ft.MainAxisAlignment.END, col={"xs": 12, "wide": 5}),
+        ], breakpoints={"xs": 0, "wide": 1200}, spacing=12, run_spacing=10),
+        ft.Row([ft.Row([sprite_tab, sheet_tab], spacing=3, tight=True),
+                ft.Row([ft.IconButton(ft.Icons.CENTER_FOCUS_STRONG, icon_size=18, icon_color=MUTED,
                               tooltip="Recenter and reset gesture zoom", on_click=lambda e: page.run_task(reset_view)),
                 text("BASE SIZE", 9, FAINT),
                 dropdown(None, zoom, [(n, f"{n * 100}%") for n in (1, 2, 3, 4, 6)], set_zoom, width=100),
                 ft.IconButton(ft.Icons.CONTRAST, icon_size=18, icon_color=MUTED, tooltip="Toggle checkerboard",
-                              on_click=lambda e: toggle_checker())], spacing=10),
+                              on_click=lambda e: toggle_checker())], spacing=6, tight=True)],
+               wrap=True, spacing=10, run_spacing=8,
+               alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
         viewport,
         text("Drag to pan · scroll / pinch to zoom · facing buttons change the view only", 10, FAINT),
-        ft.Row([direction_buttons, ft.Container(expand=True), dimensions], spacing=10),
+        ft.Row([direction_buttons, dimensions], spacing=10),
         ft.Container(bgcolor=PANEL, border=border(), border_radius=10, padding=14,
                      content=ft.Column([
                          ft.Row([play_btn, text("ANIMATION", 10, MUTED),
@@ -1144,15 +1283,17 @@ def main(page: ft.Page) -> None:
         viewport.image = None if viewport.image else ft.DecorationImage(src="checker.png", repeat=ft.ImageRepeat.REPEAT)
         page.update()
 
+    breadcrumb = ft.Row([text("/", 18, FAINT), text("Sprite workspace", 12, MUTED)], tight=True)
+    guide_btn = ft.TextButton("Quick guide", icon=ft.Icons.HELP_OUTLINE, on_click=open_guide,
+                              style=ft.ButtonStyle(color=MUTED))
     topbar = ft.Container(padding=ft.Padding(22, 14, 22, 14), bgcolor=PANEL,
         border=ft.Border(bottom=ft.BorderSide(1, BORDER)), content=ft.Row([
             ft.Container(ft.Icon(ft.Icons.FILTER_FRAMES_OUTLINED, size=21, color=INK),
                          bgcolor=ACCENT, padding=8, border_radius=8),
             text("framemill", 20, TEXT, ft.FontWeight.W_600),
-            ft.Container(width=14), text("/", 18, FAINT), text("Sprite workspace", 12, MUTED),
+            breadcrumb,
             ft.Container(expand=True),
-            ft.TextButton("Quick guide", icon=ft.Icons.HELP_OUTLINE, on_click=open_guide,
-                          style=ft.ButtonStyle(color=MUTED)), export_btn,
+            guide_btn, export_btn,
         ], spacing=12))
     footer = ft.Container(padding=ft.Padding(20, 8, 20, 8), bgcolor=PANEL,
         border=ft.Border(top=ft.BorderSide(1, BORDER)), content=ft.Row([
@@ -1161,6 +1302,21 @@ def main(page: ft.Page) -> None:
             ft.Container(width=12), ft.Container(status, expand=True), cancel_btn,
             text("LOCAL RENDERING", 9, FAINT),
         ], spacing=10))
+    def fit_window(e=None):
+        width, height = page.width or 1440, page.height or 940
+        breadcrumb.visible = width >= 1200
+        guide_btn.visible = width >= 1000
+        empty_icon.visible = height >= 850 and width >= 1000
+        empty_tagline.visible = height >= 950
+        workspace.padding = ft.Padding(16, 14, 16, 12) if width < 1100 else (
+            ft.Padding(18, 18, 18, 14) if width < 1200 else ft.Padding(28, 25, 28, 18))
+        if resize_dialog is not None:
+            resize_dialog()
+        if e is not None:
+            page.update()
+
+    page.on_resize = fit_window
+    fit_window()
     update_geometry()
     build_inspector()
     page.add(ft.Column([topbar, ft.Row([sidebar, workspace], expand=True, spacing=0), progress, footer],
