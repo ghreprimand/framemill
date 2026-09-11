@@ -21,7 +21,7 @@ classifiers = [
   "Topic :: Games/Entertainment",
 ]
 dependencies = [
-  "flet>=0.24",
+  "flet>=0.86,<0.90",  # 0.86 API; older releases differ substantially
   "pillow>=10.0",
 ]
 
