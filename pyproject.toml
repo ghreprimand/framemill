@@ -1,0 +1,47 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "framemill"
+version = "0.1.0"
+description = "Turn a rigged 3D model into a directional 2D sprite sheet, using Blender headless. No Blender knowledge required."
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.10"
+keywords = ["sprite", "spritesheet", "blender", "gamedev", "pixel-art", "2d", "fbx", "gltf"]
+authors = [{ name = "The framemill authors" }]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Environment :: X11 Applications",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3",
+  "Topic :: Multimedia :: Graphics",
+  "Topic :: Games/Entertainment",
+]
+dependencies = [
+  "flet>=0.24",
+  "pillow>=10.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "ruff>=0.5"]
+
+[project.urls]
+Homepage = "https://github.com/framemill/framemill"
+Repository = "https://github.com/framemill/framemill"
+Issues = "https://github.com/framemill/framemill/issues"
+
+[project.scripts]
+framemill = "framemill.cli:main"
+
+[project.gui-scripts]
+framemill-gui = "framemill.app:run"
+
+[tool.hatch.build.targets.wheel]
+packages = ["framemill"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"

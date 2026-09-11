@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+env/
+
+# Flet / Flutter build output
+build/
+*.app/
+*.AppImage
+*.dmg
+*.msi
+
+# Test / coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Local runtime data (never commit user paths / config)
+*.log
+/tmp_render/
+scratch/
