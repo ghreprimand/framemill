@@ -47,3 +47,28 @@ def test_tga_magic_pink(tmp_path: Path) -> None:
     body = data[18:]
     # first pixel BGRA -> magenta with alpha 0
     assert body[0:4] == bytes((255, 0, 255, 0))
+
+
+def test_layout_axis_cols(tmp_path: Path) -> None:
+    s = RenderSettings(angles=8, frames=4, layout_axis="cols")
+    _fake_frames(tmp_path, s)
+    sheet = build_sheet(tmp_path, s)
+    # cols => directions across (8), frames down (4)
+    assert sheet.size == (96 * 8, 128 * 4)
+
+
+def test_start_direction_reorders_rows(tmp_path: Path) -> None:
+    from framemill.settings import build_layout
+    from PIL import Image
+    s = RenderSettings(angles=8, frames=1, start_direction="N", rotation="cw",
+                       frame_width=4, frame_height=4, render_width=4, render_height=4)
+    # Tag each direction's frame with a unique red value so we can identify rows.
+    names = [n for n, _ in build_layout(8, "S", "cw")]  # canonical set
+    for i, d in enumerate(build_layout(8, "N", "cw")):
+        name = d[0]
+        Image.new("RGBA", (4, 4), (i * 10, 0, 0, 255)).save(tmp_path / f"{name}_00.png")
+    sheet = build_sheet(tmp_path, s)
+    # Row 0 must be 'N' (start), row 1 'NW' for cw
+    assert [n for n, _ in build_layout(8, "N", "cw")][0] == "N"
+    assert sheet.getpixel((0, 0))[0] == 0        # row0 tagged i=0
+    assert sheet.getpixel((0, 4))[0] == 10       # row1 tagged i=1

@@ -219,10 +219,32 @@ def setup_render(cfg, preview):
 
 
 def render_all(model, out_dir, cfg, idle=None, preview=False):
-    angles = 1 if preview else cfg.get("angles", 8)
-    frames = 1 if preview else cfg.get("frames", 4)
-    dirs = DIRECTIONS.get(angles, [f"angle{i}" for i in range(angles)])
+    full_layout = cfg.get("_layout")
+    if not full_layout:
+        n = cfg.get("angles", 8)
+        names = DIRECTIONS.get(n, [f"angle{i}" for i in range(n)])
+        full_layout = [[nm, -(360.0 / n) * i] for i, nm in enumerate(names)]
+
+    if preview:
+        layout = [full_layout[0]]
+        frames = 1
+    else:
+        layout = full_layout
+        frames = cfg.get("frames", 4)
+
+    phase = float(cfg.get("phase_offset", 0.0) or 0.0)
+    reverse = bool(cfg.get("reverse", False))
     Path(out_dir).mkdir(parents=True, exist_ok=True)
+    total = len(layout) * frames
+
+    def sample_frame(fi, start, length):
+        if length <= 0:
+            return start
+        frac = (fi / max(frames, 1)) + phase
+        frac = frac % 1.0
+        if reverse:
+            frac = (1.0 - frac) % 1.0
+        return start + frac * length
 
     def render_from(path, frame_indices, ref=None):
         clear_scene()
@@ -233,25 +255,21 @@ def render_all(model, out_dir, cfg, idle=None, preview=False):
         center, size = ref if ref else max_bounds(objs, start, end)
         setup_render(cfg, preview)
         length = end - start
-        step = -360.0 / angles
         counter = render_from.counter
-        for ai in range(angles):
-            deg = ai * step
+        for name, deg in layout:
             setup_camera(center, size, deg, cfg)
             setup_light(center, deg, cfg)
             for fi in frame_indices:
-                if length > 0:
-                    if len(frame_indices) == 1:
-                        af = cfg.get("idle_frame_index") or end
-                    else:
-                        af = start + (fi / max(frames, 1)) * length
+                if len(frame_indices) == 1 and length > 0:
+                    idle_idx = cfg.get("idle_frame_index")
+                    af = idle_idx if idle_idx is not None else end
                 else:
-                    af = start
+                    af = sample_frame(fi, start, length)
                 bpy.context.scene.frame_set(int(af))
-                bpy.context.scene.render.filepath = os.path.join(out_dir, f"{dirs[ai]}_{fi:02d}.png")
+                bpy.context.scene.render.filepath = os.path.join(out_dir, f"{name}_{fi:02d}.png")
                 bpy.ops.render.render(write_still=True)
                 counter += 1
-                log(f"FRAMEMILL: PROGRESS {counter}/{angles * frames}")
+                log(f"FRAMEMILL: PROGRESS {counter}/{total}")
         render_from.counter = counter
         return center, size
 

@@ -75,7 +75,7 @@ def render(blender_path: str, model_path: str, out_frames_dir: Path,
     out_frames_dir.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory() as tmp:
         cfg = Path(tmp) / "config.json"
-        cfg.write_text(json.dumps(settings.to_dict()))
+        cfg.write_text(json.dumps(settings.render_config()))
         args = ["--input", model_path, "--output", str(out_frames_dir), "--config", str(cfg)]
         if idle_path:
             args += ["--idle", idle_path]

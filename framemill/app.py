@@ -247,6 +247,22 @@ def main(page: ft.Page) -> None:
             value=st.settings.view_transform, expand=True,
             options=[ft.dropdown.Option(v) for v in ("Standard", "AgX", "Filmic")],
             on_select=lambda e: upd("view_transform", e.control.value)))
+        start_dd = dd_style(ft.Dropdown(
+            value=st.settings.start_direction, expand=True,
+            options=[ft.dropdown.Option(d) for d in ("S", "N", "E", "W")],
+            on_select=lambda e: upd("start_direction", e.control.value)))
+        rot_dd = dd_style(ft.Dropdown(
+            value=st.settings.rotation, expand=True,
+            options=[ft.dropdown.Option("cw", "Clockwise"),
+                     ft.dropdown.Option("ccw", "Counter-clockwise")],
+            on_select=lambda e: upd("rotation", e.control.value)))
+        axis_dd = dd_style(ft.Dropdown(
+            value=st.settings.layout_axis, expand=True,
+            options=[ft.dropdown.Option("rows", "Directions as rows"),
+                     ft.dropdown.Option("cols", "Directions as columns")],
+            on_select=lambda e: upd("layout_axis", e.control.value)))
+        rev_sw = ft.Switch(value=st.settings.reverse, active_color=ACCENT,
+                           on_change=lambda e: upd("reverse", e.control.value))
         sections_col.controls = [
             section("Camera", ft.Icons.VIDEOCAM_OUTLINED, [
                 slider_row("Ortho scale × model height", "ortho_scale_mult", 0.5, 4.0, 0.1),
@@ -264,6 +280,16 @@ def main(page: ft.Page) -> None:
                 ft.Column([label("View transform"), vt], spacing=6),
                 slider_row("Exposure", "exposure", -3.0, 3.0, 0.1),
                 slider_row("Gamma", "gamma", 0.2, 3.0, 0.05),
+            ]),
+            section("Layout & timing", ft.Icons.EXPLORE_OUTLINED, [
+                ft.Row([
+                    ft.Column([label("Start direction"), start_dd], spacing=6, expand=True),
+                    ft.Column([label("Rotation"), rot_dd], spacing=6, expand=True),
+                ], spacing=12),
+                ft.Column([label("Sheet layout"), axis_dd], spacing=6),
+                slider_row("Phase offset  (which pose is frame 0)", "phase_offset", 0.0, 1.0, 0.05),
+                ft.Row([label("Reverse cycle"), rev_sw],
+                       alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
             ]),
             section("Material", ft.Icons.LAYERS_OUTLINED, [
                 slider_row("Specular IOR level", "specular_ior", 0.0, 1.0, 0.05),
