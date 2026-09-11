@@ -1,33 +1,52 @@
 #!/usr/bin/env bash
-# Wrap the `flet build linux` output into a portable .AppImage.
-# Expects the Flet/Flutter bundle under build/linux (adjust if flet changes layout).
+# Wrap a verified Flet Linux bundle. Supply a trusted appimagetool executable.
 set -euo pipefail
 
 APP=framemill
-BUNDLE_DIR="${BUNDLE_DIR:-build/linux}"
-OUT_DIR="dist"
-APPDIR="build/${APP}.AppDir"
+OUT_DIR=dist
 
-mkdir -p "$OUT_DIR" "$APPDIR/usr/bin"
-
-# Copy the built app payload.
-cp -r "$BUNDLE_DIR"/* "$APPDIR/usr/bin/" 2>/dev/null || {
-  echo "ERROR: no bundle at $BUNDLE_DIR — run 'flet build linux' first." >&2
+find_bundle() {
+  if [ -n "${BUNDLE_DIR:-}" ]; then
+    if [ -f "$BUNDLE_DIR/$APP" ] && [ -x "$BUNDLE_DIR/$APP" ]; then
+      printf '%s\n' "$BUNDLE_DIR"
+      return
+    fi
+    echo "ERROR: BUNDLE_DIR must contain an executable named framemill." >&2
+    exit 1
+  fi
+  local candidate
+  for candidate in build/linux build/flutter/linux/x64/release/bundle build/linux/x64/release/bundle; do
+    if [ -f "$candidate/$APP" ] && [ -x "$candidate/$APP" ]; then
+      printf '%s\n' "$candidate"
+      return
+    fi
+  done
+  echo "ERROR: no runnable bundle found. Run flet build linux --artifact framemill first." >&2
   exit 1
 }
 
-# Minimal desktop entry + AppRun.
-cat > "$APPDIR/${APP}.desktop" <<DESK
+BUNDLE_DIR="$(find_bundle)"
+APPIMAGETOOL="${APPIMAGETOOL:-$(command -v appimagetool || true)}"
+if [ -z "$APPIMAGETOOL" ] || [ ! -x "$APPIMAGETOOL" ]; then
+  echo "ERROR: install a trusted appimagetool, or set APPIMAGETOOL to its executable path." >&2
+  exit 1
+fi
+
+mkdir -p build "$OUT_DIR"
+# A fresh directory prevents stale files from a previous build entering a release.
+APPDIR="$(mktemp -d build/framemill.AppDir.XXXXXX)"
+mkdir -p "$APPDIR/usr/bin"
+cp -a "$BUNDLE_DIR"/. "$APPDIR/usr/bin/"
+cp framemill/assets/icon.svg "$APPDIR/$APP.svg"
+
+cat > "$APPDIR/$APP.desktop" <<'DESKTOP'
 [Desktop Entry]
 Name=framemill
-Exec=${APP}
-Icon=${APP}
+Exec=framemill
+Icon=framemill
 Type=Application
 Categories=Graphics;Development;
-DESK
-
-# Placeholder icon (replace with docs/images/icon.png in the real project).
-touch "$APPDIR/${APP}.png"
+DESKTOP
 
 cat > "$APPDIR/AppRun" <<'RUN'
 #!/bin/sh
@@ -35,19 +54,5 @@ HERE="$(dirname "$(readlink -f "$0")")"
 exec "$HERE/usr/bin/framemill" "$@"
 RUN
 chmod +x "$APPDIR/AppRun"
-
-# Fetch appimagetool if not present.
-if ! command -v appimagetool >/dev/null 2>&1; then
-  TOOL=build/appimagetool
-  if [ ! -x "$TOOL" ]; then
-    curl -sSL -o "$TOOL" \
-      "https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage"
-    chmod +x "$TOOL"
-  fi
-  APPIMAGETOOL="$TOOL"
-else
-  APPIMAGETOOL="$(command -v appimagetool)"
-fi
-
-ARCH=x86_64 "$APPIMAGETOOL" "$APPDIR" "$OUT_DIR/${APP}-x86_64.AppImage"
-echo "Wrote $OUT_DIR/${APP}-x86_64.AppImage"
+ARCH=x86_64 "$APPIMAGETOOL" "$APPDIR" "$OUT_DIR/$APP-x86_64.AppImage"
+echo "Wrote $OUT_DIR/$APP-x86_64.AppImage"

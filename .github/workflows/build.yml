@@ -50,15 +50,20 @@ jobs:
             libsecret-1-dev libunwind-dev
 
       - name: Install flet
-        run: pip install flet
+        run: pip install "flet[cli]==0.86.5"
 
       - name: Build (${{ matrix.target }})
-        run: flet build ${{ matrix.target }} -v
+        run: flet build ${{ matrix.target }} -v --module-name main --artifact framemill --exclude .venv venv env .archon .git tests sample_models scratch tmp_render .pytest_cache .ruff_cache .env ".env.*" "*.log" "*.recipe.json" docs packaging
 
       # Wrap the Linux bundle into a portable AppImage.
       - name: Package AppImage
         if: matrix.target == 'linux'
-        run: bash packaging/build_appimage.sh
+        run: |
+          if command -v appimagetool >/dev/null 2>&1; then
+            bash packaging/build_appimage.sh
+          else
+            echo 'Trusted appimagetool not installed; uploading the Linux bundle.'
+          fi
 
       - uses: actions/upload-artifact@v4
         with:

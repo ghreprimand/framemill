@@ -32,3 +32,11 @@ Thumbs.db
 /tmp_render/
 scratch/
 sample_models/
+
+# Private local orchestration and environment data
+.archon/
+.env
+.env.*
+!.env.example
+.ruff_cache/
+*.recipe.json
