@@ -128,6 +128,7 @@ def main(page: ft.Page) -> None:
                                         text_style=ft.TextStyle(size=12)), **kwargs)
 
     def field(label, value, on_change, width=None, **kwargs):
+        kwargs.setdefault("label_style", ft.TextStyle(size=11))
         return ft.TextField(label=label, value=str(value), on_change=on_change or (lambda e: None), width=width,
                             text_size=12, dense=True, filled=True, fill_color=BG,
                             border_color=BORDER, focused_border_color=ACCENT,
@@ -1219,7 +1220,7 @@ def main(page: ft.Page) -> None:
     frames_field = field("Frames", settings.frames, lambda e: integer("frames", e), expand=True)
     appearance_dd = dropdown("Appearance preset", appearance_key(),
         [(k, v.label) for k, v in PRESETS.items()] + [("custom", "Custom appearance")], choose_preset)
-    sidebar = ft.Container(width=310, bgcolor=PANEL, padding=ft.Padding(20, 20, 6, 20),
+    sidebar = ft.Container(width=340, bgcolor=PANEL, padding=ft.Padding(20, 20, 6, 20),
         border=ft.Border(right=ft.BorderSide(1, BORDER)), content=ft.Column([
           ft.Container(padding=ft.Padding(0, 0, 14, 8), content=ft.Column([
             section("01 / Source", [ft.Container(ft.Row([
