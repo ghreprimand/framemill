@@ -6,8 +6,11 @@ from pathlib import Path
 
 import flet as ft
 
-from . import appconfig, blender, compositor, guide
+import dataclasses
+
+from . import appconfig, blender, compositor, export, guide
 from .settings import PRESETS, DEFAULT_PRESET, RenderSettings
+from .export import EXPORT_PRESETS, DEFAULT_EXPORT
 
 # ---------------------------------------------------------------- design tokens
 BG        = "#0d0e12"
@@ -42,6 +45,7 @@ class AppState:
         self.blender_path: str | None = blender.find_blender()
         self.formats: list[str] = ["png"]
         self.magic_pink = False
+        self.export_cfg = dataclasses.replace(EXPORT_PRESETS[DEFAULT_EXPORT].config)
         self.rendering = False
 
 
@@ -140,7 +144,8 @@ def main(page: ft.Page) -> None:
     model_picker = ft.FilePicker()
     idle_picker = ft.FilePicker()
     blender_picker = ft.FilePicker()
-    page.services.extend([model_picker, idle_picker, blender_picker])
+    palette_picker = ft.FilePicker()
+    page.services.extend([model_picker, idle_picker, blender_picker, palette_picker])
     _EXT = ["fbx", "glb", "gltf", "obj"]
 
     model_label = ft.Text("No model selected", color=MUTED, size=12, expand=True,
@@ -227,16 +232,15 @@ def main(page: ft.Page) -> None:
         options=[ft.dropdown.Option(str(n)) for n in (1, 4, 8, 12, 16)],
         on_select=lambda e: upd("frames", int(e.control.value))))
 
-    def set_format(png: bool, tga: bool) -> None:
-        st.formats = [f for f, on in (("png", png), ("tga", tga)) if on] or ["png"]
+    export_summary = ft.Text("", size=12, color=TEXT, weight=ft.FontWeight.W_600)
 
-    png_cb = ft.Checkbox(label="PNG", value=True, active_color=ACCENT,
-                         on_change=lambda e: set_format(e.control.value, tga_cb.value))
-    tga_cb = ft.Checkbox(label="TGA", value=False, active_color=ACCENT,
-                         on_change=lambda e: set_format(png_cb.value, e.control.value))
-    pink_cb = ft.Checkbox(label="Magic-pink transparency (legacy engines)", value=False,
-                          active_color=ACCENT, scale=0.95,
-                          on_change=lambda e: setattr(st, "magic_pink", e.control.value))
+    def refresh_export_summary() -> None:
+        c = st.export_cfg
+        bg = {"transparent": "alpha", "magic_pink": "magenta", "solid": c.solid_color}[c.background]
+        export_summary.value = (f"{c.format.upper()} · {c.depth}-bit · {bg}"
+                                + (f" · dilate {c.dilate}px" if c.dilate else "")
+                                + (f" · {c.dither}" if c.depth == 8 and c.dither != "none" else ""))
+        page.update()
 
     sections_col = ft.Column(spacing=8)
 
@@ -329,11 +333,12 @@ def main(page: ft.Page) -> None:
                 else:
                     out_dir = Path(st.model_path).parent
                     stem = Path(st.model_path).stem
-                    written = compositor.composite(frames_dir, out_dir / f"{stem}_sheet",
-                                                   st.settings, st.formats, magic_pink=st.magic_pink)
-                    png = next((w for w in written if w.suffix == ".png"), written[0])
-                    show_sprite(str(png))
-                    set_status("Saved  " + " · ".join(w.name for w in written) + f"   → {out_dir}")
+                    sheet = compositor.build_sheet(frames_dir, st.settings)
+                    prev = Path(tempfile.gettempdir()) / "framemill_preview.png"
+                    compositor.save_png(sheet, prev)
+                    show_sprite(str(prev))
+                    p = export.save(sheet, out_dir / f"{stem}_sheet", st.export_cfg)
+                    set_status(f"Saved  {p.name}   → {out_dir}")
             progress.value = 1.0
         except Exception as ex:  # noqa: BLE001
             progress.value = 0
@@ -341,6 +346,88 @@ def main(page: ft.Page) -> None:
         finally:
             st.rendering = False
             page.update()
+
+    # ============================================================ export dialog
+    palette_label = ft.Text("(no palette file)", size=11, color=MUTED)
+
+    async def pick_palette(e) -> None:
+        files = await palette_picker.pick_files(allow_multiple=False,
+                                                allowed_extensions=["gpl", "pal", "hex", "txt"])
+        if files:
+            st.export_cfg.palette_path = files[0].path
+            st.export_cfg.palette_source = "file"
+            palette_label.value = files[0].name
+            page.update()
+
+    def open_export() -> None:
+        cfg = st.export_cfg
+
+        def _dd(field, opts, cast=str):
+            return dd_style(ft.Dropdown(
+                value=str(getattr(cfg, field)), expand=True,
+                options=[ft.dropdown.Option(str(k), lbl) for k, lbl in opts],
+                on_select=lambda e: setattr(cfg, field, cast(e.control.value))))
+
+        fmt = _dd("format", [("png", "PNG"), ("tga", "TGA"), ("bmp", "BMP")])
+        depth = _dd("depth", [("32", "32-bit RGBA"), ("24", "24-bit RGB"), ("8", "8-bit indexed")], int)
+        bg = _dd("background", [("transparent", "Transparent"), ("magic_pink", "Magic pink"),
+                                ("solid", "Solid colour")])
+        solid = ft.TextField(value=cfg.solid_color, width=120, dense=True, label="Solid #hex",
+                             text_size=12, on_change=lambda e: setattr(cfg, "solid_color", e.control.value))
+        amode = _dd("alpha_mode", [("soft", "Soft (anti-aliased)"), ("hard", "Hard (1-bit)")])
+        cutoff = ft.Slider(min=1, max=255, divisions=254, value=cfg.alpha_cutoff, active_color=ACCENT,
+                           label="{value}", on_change=lambda e: setattr(cfg, "alpha_cutoff", int(e.control.value)))
+        dilate = ft.Slider(min=0, max=8, divisions=8, value=cfg.dilate, active_color=ACCENT,
+                           label="{value}px", on_change=lambda e: setattr(cfg, "dilate", int(e.control.value)))
+        dither = _dd("dither", [("none", "None"), ("ordered", "Ordered (Bayer)"),
+                                ("floyd", "Floyd\u2013Steinberg")])
+        psource = _dd("palette_source", [("auto", "Adaptive (from image)"), ("file", "From file"),
+                                         ("fixed", "Fixed")])
+        pcolors = ft.Slider(min=2, max=256, divisions=254, value=cfg.palette_colors, active_color=ACCENT,
+                            label="{value}", on_change=lambda e: setattr(cfg, "palette_colors", int(e.control.value)))
+
+        def load_preset(e) -> None:
+            st.export_cfg = dataclasses.replace(EXPORT_PRESETS[e.control.value].config)
+            page.pop_dialog()
+            open_export()
+
+        preset_dd = dd_style(ft.Dropdown(
+            hint_text="Load a preset…", expand=True,
+            options=[ft.dropdown.Option(k, pr.label) for k, pr in EXPORT_PRESETS.items()],
+            on_select=load_preset))
+
+        def done(e) -> None:
+            refresh_export_summary()
+            page.pop_dialog()
+
+        content = ft.Container(width=470, height=560, content=ft.Column([
+            preset_dd,
+            ft.Divider(color=BORDER),
+            ft.Row([ft.Column([label("Format"), fmt], expand=True, spacing=6),
+                    ft.Column([label("Colour depth"), depth], expand=True, spacing=6)], spacing=12),
+            ft.Row([ft.Column([label("Background"), bg], expand=True, spacing=6), solid],
+                   spacing=12, vertical_alignment=ft.CrossAxisAlignment.END),
+            ft.Column([label("Alpha edge"), amode], spacing=6),
+            ft.Column([label("Alpha cutoff  (hard only)"), cutoff], spacing=0),
+            ft.Column([label("Edge dilation  (perimeter bleed)"), dilate], spacing=0),
+            ft.Divider(color=BORDER),
+            ft.Text("8-BIT INDEXED", size=10, color=FAINT, weight=ft.FontWeight.W_700),
+            ft.Column([label("Dithering"), dither], spacing=6),
+            ft.Column([label("Palette source"), psource], spacing=6),
+            ft.Row([ft.OutlinedButton("Palette file\u2026", icon=ft.Icons.UPLOAD_FILE,
+                                      on_click=pick_palette,
+                                      style=ft.ButtonStyle(color=TEXT, shape=_round(10),
+                                                           side=ft.BorderSide(1, BORDER))),
+                    palette_label], spacing=10, vertical_alignment=ft.CrossAxisAlignment.CENTER),
+            ft.Column([label("Adaptive colours"), pcolors], spacing=0),
+        ], scroll=ft.ScrollMode.AUTO, spacing=12, tight=True))
+
+        page.show_dialog(ft.AlertDialog(
+            modal=True, bgcolor=PANEL, shape=_round(14),
+            title=ft.Text("Export settings", weight=ft.FontWeight.BOLD, color=TEXT),
+            content=content,
+            actions=[ft.FilledButton("Done", on_click=done,
+                     style=ft.ButtonStyle(bgcolor=ACCENT, color="#0b1020", shape=_round(10)))]))
 
     # ============================================================ layout helpers
     def card(title: str, controls: list[ft.Control]) -> ft.Container:
@@ -376,8 +463,13 @@ def main(page: ft.Page) -> None:
                     ft.Column([label("Directions"), angles_dd], spacing=6, expand=True),
                     ft.Column([label("Frames"), frames_dd], spacing=6, expand=True),
                 ], spacing=12),
-                ft.Row([png_cb, tga_cb], spacing=18),
-                pink_cb,
+                ft.Row([
+                    ft.Column([label("Export format"), export_summary], spacing=4, expand=True),
+                    ft.OutlinedButton("Export…", icon=ft.Icons.TUNE, on_click=lambda e: open_export(),
+                                      style=ft.ButtonStyle(color=TEXT, shape=_round(10),
+                                                           side=ft.BorderSide(1, BORDER),
+                                                           padding=ft.Padding(14, 12, 14, 12))),
+                ], spacing=12, vertical_alignment=ft.CrossAxisAlignment.END),
             ]),
             ft.Container(height=2),
             ft.Text("ADVANCED", size=10, color=FAINT, weight=ft.FontWeight.W_700),
@@ -476,6 +568,7 @@ def main(page: ft.Page) -> None:
 
     page.add(ft.Column([topbar, body], spacing=0, expand=True))
     rebuild_sections()
+    refresh_export_summary()
     refresh_blender_bar()
     nav_to("Render")
 
