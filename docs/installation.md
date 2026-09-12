@@ -1,14 +1,12 @@
 # Installing framemill
 
-framemill runs on **Windows, macOS, and Linux**. There are two ways to get it:
+framemill runs on **Windows, macOS, and Linux**. Pick one:
 
-1. **From source** (recommended). A small Python install. Best if you already have
-   Python, or want the latest code and the command-line tool.
-2. **Packaged binaries.** A prebuilt desktop app. No Python needed, but the builds
-   are **unsigned and alpha**, so your OS will warn you the first time (see
-   [Security warnings](#security-warnings-on-unsigned-builds)).
+1. **pipx** (recommended, all platforms). One command; isolated; easy updates.
+2. **AppImage** (Linux). A single self-contained file; no Python needed.
+3. **From source**. Best if you want the latest code or plan to hack on it.
 
-Either way you must install **Blender** separately. It is the render engine and is
+Every method needs **Blender** installed separately. It is the render engine and is
 **not bundled** (see [Blender](#blender-required)).
 
 ---
@@ -24,7 +22,61 @@ the executable once. The choice is remembered.
 
 ---
 
-## Option 1: From source (recommended)
+## Option 1: pipx (recommended)
+
+[pipx](https://pipx.pypa.io) installs framemill into its own isolated environment and puts
+the `framemill` command on your PATH. It needs **Python 3.10+**.
+
+Install pipx if you do not have it:
+
+- **Windows:** `py -m pip install --user pipx` then `py -m pipx ensurepath`
+- **macOS:** `brew install pipx` then `pipx ensurepath` (or `python3 -m pip install --user pipx`)
+- **Linux:** `sudo apt install pipx` (or `python3 -m pip install --user pipx`) then `pipx ensurepath`
+
+Then install framemill:
+
+```bash
+pipx install framemill
+framemill            # launches the desktop GUI
+```
+
+**Update:**
+
+```bash
+pipx upgrade framemill
+```
+
+**Uninstall:**
+
+```bash
+pipx uninstall framemill
+```
+
+Because pipx installs from source into a local environment, there is no unsigned-binary
+warning from Windows SmartScreen or macOS Gatekeeper.
+
+---
+
+## Option 2: AppImage (Linux)
+
+Download `framemill-x86_64.AppImage` from the
+[releases page](https://github.com/ghreprimand/framemill/releases), then:
+
+```bash
+chmod +x framemill-x86_64.AppImage
+./framemill-x86_64.AppImage
+```
+
+The AppImage bundles Python and framemill; you still need Blender installed. If it will not
+start, install FUSE (`libfuse2` on Debian/Ubuntu) or run with `--appimage-extract-and-run`.
+
+**Update:** download the newer AppImage and replace the old file. There is no OS security
+prompt to clear for an AppImage; it is not code-signed by design, and running it is just
+`chmod +x` and launch.
+
+---
+
+## Option 3: From source
 
 Requires **Python 3.10+**.
 
@@ -47,8 +99,7 @@ python -m pip install -e .
 framemill            # launches the desktop GUI
 ```
 
-`pip install -e .` pulls framemill's Python dependencies (Flet, Pillow, NumPy) into the
-project virtualenv only; nothing is installed system-wide. Blender is not a pip package.
+**Update:** `git pull` then `python -m pip install -e .` again.
 
 For a browser preview of the same interface (useful on a headless box):
 
@@ -57,7 +108,7 @@ FRAMEMILL_WEB=1 framemill
 # open http://localhost:8000/
 ```
 
-The command-line tool ships with the same install:
+The command-line tool ships with every install method:
 
 ```bash
 framemill render walk.fbx -o hero --preset mixamo --angles 8 --frames 8 --format png,tga
@@ -68,77 +119,16 @@ See the [CLI reference](cli.md) for all commands and flags.
 
 ---
 
-## Option 2: Packaged binaries
+## Installing a specific version or the wheel
 
-Each tagged release attaches the from-source **wheel and sdist** (the primary artifacts),
-and, when the build succeeds, best-effort desktop bundles produced per platform with
-[`flet build`](https://flet.dev) (see `.github/workflows/release.yml`); Linux bundles can
-additionally be wrapped into a portable **AppImage**. Grab them from the
-[releases page](https://github.com/ghreprimand/framemill/releases).
-
-Install the wheel directly if you prefer not to clone:
+Every release also attaches the **wheel** and **sdist** to the
+[releases page](https://github.com/ghreprimand/framemill/releases). To pin a version:
 
 ```bash
-pip install framemill-0.1.0-py3-none-any.whl
-framemill
+pipx install framemill==0.1.1
+# or install a downloaded wheel directly:
+pipx install ./framemill-0.1.1-py3-none-any.whl
 ```
-
-> **The platform binaries are unsigned, best-effort, and pre-release.** They are a
-> convenience, not the primary distribution channel. If anything looks off, prefer
-> [installing from source](#option-1-from-source-recommended) or the wheel. You still need
-> [Blender](#blender-required) installed separately.
-
-### Security warnings on unsigned builds
-
-Because the binaries are not code-signed or notarized, each OS shows a first-run warning.
-This is expected for small open-source tools without a paid signing certificate.
-
-**Windows (SmartScreen: "Windows protected your PC")**
-1. Click **More info**.
-2. Click **Run anyway**.
-
-Only do this for a build you downloaded from the official
-[releases page](https://github.com/ghreprimand/framemill/releases).
-
-**macOS (Gatekeeper: "cannot be opened because the developer cannot be verified")**
-
-Right-click (or Control-click) the app, choose **Open**, then **Open** again in the
-dialog. Or clear the quarantine attribute from a terminal:
-
-```bash
-xattr -dr com.apple.quarantine /Applications/framemill.app
-```
-
-**Linux (AppImage)**
-
-```bash
-chmod +x framemill-x86_64.AppImage
-./framemill-x86_64.AppImage
-```
-
-If it will not start, install FUSE (`libfuse2` on Debian/Ubuntu) or run with
-`--appimage-extract-and-run`.
-
----
-
-## Build your own binary
-
-You can produce a bundle yourself with the Flet CLI. This needs the **Flutter SDK** plus
-platform build dependencies (Linux, for example, needs GTK/mpv development packages; see
-the `package` job in `.github/workflows/build.yml` for the exact list).
-
-```bash
-pip install "flet[cli]==0.86.5"        # the CI-pinned, tested version
-flet build linux   --module-name main --artifact framemill      # or windows / macos
-```
-
-Wrap a verified Linux bundle into an AppImage with a **trusted local** `appimagetool`:
-
-```bash
-APPIMAGETOOL=/path/to/appimagetool bash packaging/build_appimage.sh
-```
-
-The script never downloads or executes packaging tools for you; supply a tool you trust.
 
 ---
 
@@ -154,7 +144,8 @@ The script never downloads or executes packaging tools for you; supply a tool yo
 
 ## Uninstall
 
-- **From source:** delete the cloned folder and its `.venv`. Optionally remove the
-  `config.json` from the config directory above.
-- **Binary:** delete the app bundle or AppImage. Remove `config.json` if you want a
-  clean slate.
+- **pipx:** `pipx uninstall framemill`.
+- **AppImage:** delete the file.
+- **From source:** delete the cloned folder and its `.venv`.
+
+Optionally remove `config.json` from the config directory above for a clean slate.

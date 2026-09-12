@@ -6,8 +6,8 @@ pages below go deeper.
 
 ## Guides
 
-- **[Installation](installation.md):** install on Windows / macOS / Linux, from source
-  or prebuilt binaries, plus Blender setup and unsigned-build security warnings.
+- **[Installation](installation.md):** install on Windows / macOS / Linux via pipx, the
+  Linux AppImage, or from source, with per-platform update commands and Blender setup.
 - **[Workflow and sampling](workflow.md):** the model-to-sheet pipeline, how frames are
   sampled, and first-frame replacement.
 - **[Command line (CLI)](cli.md):** `render`, `inspect`, and every flag, for scripting and CI.

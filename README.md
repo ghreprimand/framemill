@@ -39,15 +39,26 @@ downscaling, sprite-sheet layout, legacy-engine TGA output) are handled for you.
 
 ## Quick start
 
+Install with [pipx](https://pipx.pypa.io) (Windows / macOS / Linux):
+
+```bash
+pipx install framemill
+framemill            # launches the GUI
+```
+
+Update with `pipx upgrade framemill`. A Linux **AppImage** and the wheel/sdist are on the
+[releases page](https://github.com/ghreprimand/framemill/releases). Prefer to run from
+source?
+
 ```bash
 git clone https://github.com/ghreprimand/framemill
 cd framemill
 python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
 python -m pip install -e .
-framemill            # launches the GUI
+framemill
 ```
 
-Full steps, prebuilt binaries, and per-OS notes are in the
+Per-OS steps, update commands, and version pinning are in the
 [installation guide](docs/installation.md).
 
 ## Documentation
@@ -56,7 +67,7 @@ Detailed docs live in [`docs/`](docs/README.md):
 
 | Guide | What it covers |
 | --- | --- |
-| [Installation](docs/installation.md) | Windows / macOS / Linux, from source or binaries, Blender setup, security warnings. |
+| [Installation](docs/installation.md) | pipx, AppImage, or from source; per-platform install and update commands; Blender setup. |
 | [Command line (CLI)](docs/cli.md) | `render`, `inspect`, and every flag, for scripting and CI. |
 | [Settings reference](docs/settings-reference.md) | Every render and export control, its effect, and its default. |
 | [Recipes & metadata](docs/recipes-and-metadata.md) | The portable recipe file and the JSON metadata sidecar, field by field. |

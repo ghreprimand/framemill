@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "framemill"
-version = "0.1.0"
+version = "0.1.1"
 description = "Turn a rigged 3D model into a directional 2D sprite sheet, using Blender headless. No Blender knowledge required."
 readme = "README.md"
 license = { file = "LICENSE" }
@@ -21,7 +21,9 @@ classifiers = [
   "Topic :: Games/Entertainment",
 ]
 dependencies = [
-  "flet>=0.86,<0.90",  # 0.86 API; older releases differ substantially
+  # The desktop extra pulls in flet-desktop, the prebuilt client the GUI needs.
+  # Without it, a plain install starts the CLI but the desktop window cannot open.
+  "flet[desktop]>=0.86,<0.90",  # 0.86 API; older releases differ substantially
   "pillow>=10.0",
   "numpy>=1.24",
 ]

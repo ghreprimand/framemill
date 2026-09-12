@@ -1,58 +1,60 @@
 #!/usr/bin/env bash
-# Wrap a verified Flet Linux bundle. Supply a trusted appimagetool executable.
+# Build a self-contained framemill AppImage with python-appimage.
+#
+# This bundles a relocatable manylinux CPython plus framemill and its Python
+# dependencies (flet-desktop, Pillow, NumPy, ...). The user still needs Blender
+# installed separately; framemill auto-detects it. Requires network access to
+# fetch the manylinux base and pip dependencies, so it runs in CI, not as part
+# of the offline test suite.
 set -euo pipefail
 
-APP=framemill
-OUT_DIR=dist
+PYVER="${PYVER:-3.12}"
+OUT_DIR="dist"
+mkdir -p "$OUT_DIR"
 
-find_bundle() {
-  if [ -n "${BUNDLE_DIR:-}" ]; then
-    if [ -f "$BUNDLE_DIR/$APP" ] && [ -x "$BUNDLE_DIR/$APP" ]; then
-      printf '%s\n' "$BUNDLE_DIR"
-      return
-    fi
-    echo "ERROR: BUNDLE_DIR must contain an executable named framemill." >&2
-    exit 1
-  fi
-  local candidate
-  for candidate in build/linux build/flutter/linux/x64/release/bundle build/linux/x64/release/bundle; do
-    if [ -f "$candidate/$APP" ] && [ -x "$candidate/$APP" ]; then
-      printf '%s\n' "$candidate"
-      return
-    fi
-  done
-  echo "ERROR: no runnable bundle found. Run flet build linux --artifact framemill first." >&2
-  exit 1
-}
+python -m pip install --upgrade pip build python-appimage
 
-BUNDLE_DIR="$(find_bundle)"
-APPIMAGETOOL="${APPIMAGETOOL:-$(command -v appimagetool || true)}"
-if [ -z "$APPIMAGETOOL" ] || [ ! -x "$APPIMAGETOOL" ]; then
-  echo "ERROR: install a trusted appimagetool, or set APPIMAGETOOL to its executable path." >&2
-  exit 1
-fi
+# Build the wheel so the AppImage installs the exact current tree.
+python -m build --wheel
+WHEEL_ABS="$(readlink -f "$(ls -1 dist/*.whl | head -1)")"
 
-mkdir -p build "$OUT_DIR"
-# A fresh directory prevents stale files from a previous build entering a release.
-APPDIR="$(mktemp -d build/framemill.AppDir.XXXXXX)"
-mkdir -p "$APPDIR/usr/bin"
-cp -a "$BUNDLE_DIR"/. "$APPDIR/usr/bin/"
-cp framemill/assets/icon.svg "$APPDIR/$APP.svg"
+RECIPE_ROOT="$(mktemp -d)"
+RECIPE="$RECIPE_ROOT/framemill"
+mkdir -p "$RECIPE"
 
-cat > "$APPDIR/$APP.desktop" <<'DESKTOP'
+# python-appimage installs everything listed here into the bundled environment.
+printf '%s\n' "$WHEEL_ABS" > "$RECIPE/requirements.txt"
+
+cat > "$RECIPE/framemill.desktop" <<'DESKTOP'
 [Desktop Entry]
+Type=Application
 Name=framemill
 Exec=framemill
 Icon=framemill
-Type=Application
 Categories=Graphics;Development;
+Terminal=false
 DESKTOP
 
-cat > "$APPDIR/AppRun" <<'RUN'
-#!/bin/sh
-HERE="$(dirname "$(readlink -f "$0")")"
-exec "$HERE/usr/bin/framemill" "$@"
-RUN
-chmod +x "$APPDIR/AppRun"
-ARCH=x86_64 "$APPIMAGETOOL" "$APPDIR" "$OUT_DIR/$APP-x86_64.AppImage"
-echo "Wrote $OUT_DIR/$APP-x86_64.AppImage"
+# python-appimage expects an icon file named after the app.
+cp framemill/assets/icon.svg "$RECIPE/framemill.svg"
+
+# The entrypoint is what the AppImage runs. Launch the GUI module with the
+# bundled interpreter (python-appimage puts it on PATH as python3).
+cat > "$RECIPE/entrypoint" <<'ENTRY'
+#! /bin/bash
+exec python3 -m framemill.app "$@"
+ENTRY
+chmod +x "$RECIPE/entrypoint"
+
+# Produces framemill-<pyver>-x86_64.AppImage in the current directory.
+python-appimage build app -p "$PYVER" "$RECIPE"
+
+# Normalise the output name and location.
+BUILT="$(ls -1 framemill*-x86_64.AppImage 2>/dev/null | head -1 || true)"
+if [ -z "$BUILT" ]; then
+  echo "ERROR: python-appimage did not produce an AppImage." >&2
+  exit 1
+fi
+mv "$BUILT" "$OUT_DIR/framemill-x86_64.AppImage"
+chmod +x "$OUT_DIR/framemill-x86_64.AppImage"
+echo "Wrote $OUT_DIR/framemill-x86_64.AppImage"
