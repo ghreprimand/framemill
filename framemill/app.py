@@ -425,15 +425,19 @@ def main(page: ft.Page) -> None:
                                    dropdown("Framing mode", settings.framing_mode,
                                             [("fit", "Fit this clip"), ("fixed", "Fixed world scale")],
                                             framing_mode_changed),
-                                   ft.Container(slider("Fit multiplier", "ortho_scale_mult", .5, 4, 70, "×"),
+                                   ft.Container(ft.Column([
+                                       slider("Fit multiplier", "ortho_scale_mult", .5, 4, 70, "×"),
+                                       text("Extra margin beyond the automatic fill. 1.0 fills the cell; "
+                                            "raise for more breathing room.", 11, MUTED),
+                                   ], spacing=6, horizontal_alignment=ft.CrossAxisAlignment.STRETCH),
                                                 visible=settings.framing_mode == "fit"),
                                    ft.Container(ft.Column([
                                        dropdown("Fit basis", settings.fit_basis,
                                                 [("height", "Height"), ("width", "Width"),
                                                  ("contain", "Fit whole character")],
                                                 lambda v: change("fit_basis", v)),
-                                       text("Height keeps a consistent size and may crop very wide poses. "
-                                            "Fit whole never crops but a wide clip renders a bit smaller.",
+                                       text("Fit whole (default) fills the cell without cropping either "
+                                            "dimension. Height may crop very wide poses. Width may crop tall ones.",
                                             11, MUTED),
                                    ], spacing=6, horizontal_alignment=ft.CrossAxisAlignment.STRETCH),
                                                 visible=settings.framing_mode == "fit"),
@@ -465,9 +469,10 @@ def main(page: ft.Page) -> None:
                                        field("Offset Y · px", settings.output_offset_y,
                                              lambda e: signed_int("output_offset_y", e), expand=True),
                                    ], spacing=10),
-                                   text("Fixed scale and origin are world units and stay identical across clips. "
-                                        "Fit mode may use this clip's bounds. Output offsets are finished-cell "
-                                        "pixels (+X right, +Y down). Viewer pan/zoom is display-only.", 11, MUTED),
+                                   text("Fit fills each clip to the cell with minimal margins. "
+                                        "Use Fixed world scale for pixel-identical sizing across clips. "
+                                        "Output offsets are finished-cell pixels (+X right, +Y down). "
+                                        "Viewer pan/zoom is display-only.", 11, MUTED),
                                    slider("Orbit distance · camera and light", "camera_distance", .5, 10, 95),
                                    text("Orbit distance is not zoom: it places the camera and the light. "
                                         "Use Framing or Fixed world scale to change how large the character is.", 11, MUTED)]),

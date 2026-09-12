@@ -68,8 +68,7 @@ def test_individual_limits_are_not_enough_without_aggregate_cap():
 def test_fixed_framing_ignores_clip_height():
     s = RenderSettings(framing_mode="fixed", framing_scale=3.5, ortho_scale_mult=1.8)
     assert framing_ortho_scale(s, (1, 1, 10)) == 3.5
-    fit = RenderSettings(framing_mode="fit", ortho_scale_mult=2)
-    assert framing_ortho_scale(fit, (1, 1, 4)) == 8
+    assert framing_ortho_scale(s, (9, 9, 1)) == 3.5
 
 
 def test_feet_anchor_frames_full_body_with_feet_low():

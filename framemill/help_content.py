@@ -409,17 +409,21 @@ ARTICLES: list[Article] = [
             ("p", "90° is level; smaller angles look down from above."),
             ("h", "Framing mode"),
             ("p", _t(
-                "Fit this clip sizes each clip from its own bounds. Fixed world scale ",
-                "uses an explicit world-unit scale and origin (X/Y/Z) that stay identical ",
-                "across clips; required for matching walk/idle/attack sheets.",
+                "Fit this clip fills each clip to the cell from its own bounds, reserving only ",
+                "a thin anti-alias margin (and a small ground band when Anchor is feet). ",
+                "Fixed world scale uses an explicit world-unit scale and origin (X/Y/Z) that ",
+                "stay identical across clips; required for matching walk/idle/attack sheets.",
             )),
-            ("p", "Fit multiplier and fixed world scale: larger values make the model smaller."),
+            ("p", _t(
+                "Fit multiplier is extra margin beyond that automatic fill. 1.0 fills the cell; ",
+                "raise it for more breathing room (the model looks smaller). Fixed world scale ",
+                "is a world-unit size; larger values also make the model smaller.",
+            )),
             ("h", "Fit basis"),
             ("p", _t(
-                "Visible only in Fit mode. Height (default) scales to character height so ",
-                "related poses stay a consistent size; very wide poses may crop at the sides. ",
-                "Width scales to the wider of X and Y. Fit whole character (contain) uses the ",
-                "larger of height and width so nothing crops, but a wide clip renders a bit smaller.",
+                "Visible only in Fit mode. Fit whole character (contain, default) uses the ",
+                "larger of height and width so nothing crops. Height scales to character height ",
+                "and may crop very wide poses. Width scales to the wider of X and Y.",
             )),
             ("h", "Anchor and offsets"),
             ("p", _t(
@@ -1053,24 +1057,24 @@ ARTICLES: list[Article] = [
             "How the orthographic scale and look-at are chosen.",
             options="Fit this clip, or Fixed world scale",
             default="Fit this clip",
-            effect="Fit uses this clip's bounds. Fixed uses your scale and origin on every clip.",
-            gotcha="Related walk/idle/attack sheets need Fixed world scale and the same origin. Fit will shift if poses differ.",
+            effect="Fit fills this clip to the cell. Fixed uses your scale and origin on every clip.",
+            gotcha="Fit maximizes per clip. Related walk/idle/attack sheets need Fixed world scale and the same origin.",
         )
         + _ctl(
             "Fit multiplier",
-            "Scale factor on the fitted orthographic size. Visible in Fit mode.",
+            "Extra margin beyond the automatic cell fill. Visible in Fit mode.",
             options="0.5× to 4×",
-            default="1.8×",
-            effect="Larger values make the model smaller in the cell.",
+            default="1.0×",
+            effect="1.0 fills the cell. Raise for more breathing room; the model looks smaller.",
             gotcha="Hidden in Fixed mode. Viewer zoom does not change this.",
         )
         + _ctl(
             "Fit basis",
             "Which character extent Fit mode uses for the orthographic scale.",
             options="Height, Width, Fit whole character",
-            default="Height",
-            effect="Height matches current output. Width fits the wider of X and Y. Fit whole uses the larger of those so sides are not cropped.",
-            gotcha="Visible only in Fit mode. A wide clip on Fit whole renders a bit smaller. Fixed mode ignores this.",
+            default="Fit whole character",
+            effect="Fit whole uses the larger of height and width so sides are not cropped. Height may crop wide poses. Width may crop tall ones.",
+            gotcha="Visible only in Fit mode. Fixed mode ignores this.",
         )
         + _ctl(
             "Fixed world scale",

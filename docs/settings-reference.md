@@ -51,16 +51,16 @@ See [Orientation](orientation.md) for the full direction model.
 
 | Setting | Default | Notes |
 | --- | --- | --- |
-| `framing_mode` | `fit` | `fit` sizes each clip from its own bounds; `fixed` uses a world-unit scale and origin. |
-| `fit_basis` | `height` | Fit mode only. `height` (default) scales to character height; `width` scales to the wider of X and Y; `contain` uses the larger of those so a wide pose is not cropped. |
-| `ortho_scale_mult` | `1.8` | Fit multiplier. Larger values make the model smaller in the cell. |
+| `framing_mode` | `fit` | `fit` fills each clip to the cell from its own bounds (minimal auto margins); `fixed` uses a world-unit scale and origin. Fit maximizes per clip; use `fixed` for pixel-identical sizing across clips. |
+| `fit_basis` | `contain` | Fit mode only. `contain` (default) uses the larger of height and width so a pose is not cropped; `height` scales to character height; `width` scales to the wider of X and Y. |
+| `ortho_scale_mult` | `1.0` | Extra margin beyond the automatic fill. `1.0` fills the cell; raise for more breathing room (the model looks smaller). |
 | `framing_scale` | `2.0` | World-unit orthographic scale in fixed mode. |
 | `framing_origin_x/y/z` | `0.0` | World-unit look-at point, fixed mode only. |
 | `anchor` | `feet` | `feet` keeps the lowest point at a consistent cell position (best when the engine places actors by their feet); `center` uses the bounds centre. Fit mode only; fixed mode uses the origin. |
 | `output_offset_x/y` | `0` | Finished-cell pixels. +X right, +Y down. |
 
 Use fixed world scale plus a shared origin and offsets so related sheets (walk, idle,
-attack) line up. Fit mode can shift between clips whose poses differ.
+attack) line up. Fit mode maximizes each clip on its own and can shift between poses.
 
 ## Camera, light, and colour
 

@@ -11,11 +11,11 @@
   enable **Remove root motion** (Layout & timing) to re-center each frame at render time.
   For matching clips across sheets, use Fixed world scale and the same world-unit origin
   plus output offsets (+X right, +Y down in the cell) rather than Fit-this-clip.
-- **Weapons, feet, or wide poses are clipped:** increase Camera → Fit multiplier or Fixed
-  world scale and render again; larger values make the model smaller. Check all directions
-  and extreme poses. Fit mode defaults to character height (Fit basis); switch to Fit whole
-  character if a wide pose crops at the sides. Viewer pan and zoom do not change the
-  exported crop.
+- **Weapons, feet, or wide poses are clipped:** Fit mode already fills the cell with a thin
+  anti-alias margin. Raise Camera → Fit multiplier for more breathing room, or raise Fixed
+  world scale; larger values make the model smaller. Check all directions and extreme poses.
+  Fit basis defaults to Fit whole character; Height may crop very wide poses. Viewer pan
+  and zoom do not change the exported crop.
 - **Character looks tiny or the fit box is huge:** the Source line shows mesh count and
   world-space W x D x H after inspect. Many meshes or unexpected dimensions usually mean
   stray geometry (a ground plane, oversized effect mesh) is enlarging the frame. Remove or

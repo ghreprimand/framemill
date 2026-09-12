@@ -26,6 +26,8 @@ DIRECTIONS = {
 
 # Feet anchor leaves this fraction of the framed height as ground below the feet.
 FEET_GROUND_MARGIN = 0.05
+# Extra fraction of the ortho window kept clear so anti-aliased edges never clip.
+AA_MARGIN = 0.02
 
 
 def log(msg):
@@ -170,14 +172,19 @@ def camera_ortho_scale(size, cfg):
     horiz = max(float(size[0]), float(size[1]))
     height = max(float(size[2]), 1e-3)
     width = max(horiz / aspect, 1e-3)
-    basis = cfg.get("fit_basis") or "height"
+    basis = cfg.get("fit_basis") or "contain"
     if basis == "width":
         extent = width
     elif basis == "contain":
         extent = max(height, width)
     else:
         extent = height
-    return extent * cfg.get("ortho_scale_mult", 1.8)
+    if cfg.get("anchor") == "feet":
+        reserved = AA_MARGIN + FEET_GROUND_MARGIN
+    else:
+        reserved = 2.0 * AA_MARGIN
+    reserved = min(max(reserved, 0.0), 0.95)
+    return extent / (1.0 - reserved) * cfg.get("ortho_scale_mult", 1.0)
 
 
 def camera_target(center, size, cfg):
@@ -261,6 +268,10 @@ def setup_camera(center, size, angle_deg, cfg):
         bpy.data.objects.remove(o)
     cam = bpy.data.cameras.new("FMCamera")
     cam.type = "ORTHO"
+    # Pin the ortho scale to the vertical extent so the fit math is independent
+    # of render aspect (auto sensor fit maps to the larger dimension, which
+    # would flip fit behaviour between portrait and landscape renders).
+    cam.sensor_fit = "VERTICAL"
     cam.ortho_scale = camera_ortho_scale(size, cfg)
     obj = bpy.data.objects.new("FMCamera", cam)
     bpy.context.scene.collection.objects.link(obj)

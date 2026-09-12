@@ -30,6 +30,8 @@ MIN_RENDER = 16
 MAX_RENDER = 8192
 # Feet anchor leaves this fraction of the framed height as ground below the feet.
 FEET_GROUND_MARGIN = 0.05
+# Extra fraction of the ortho window kept clear so anti-aliased edges never clip.
+AA_MARGIN = 0.02
 # Sheet RGBA budget (~256 MiB). Individual dimensions can still pass on their own.
 MAX_SHEET_PIXELS = 64_000_000
 # Limit each sequential render buffer, independently of animation length.
@@ -145,12 +147,23 @@ def fit_ortho_extent(
     return height
 
 
+def fit_reserved_fraction(anchor: str) -> float:
+    """Fraction of the ortho window kept clear so edges never clip."""
+    if anchor == "feet":
+        reserved = AA_MARGIN + FEET_GROUND_MARGIN
+    else:
+        reserved = 2.0 * AA_MARGIN
+    return min(max(float(reserved), 0.0), 0.95)
+
+
 def framing_ortho_scale(settings: RenderSettings, size: tuple[float, float, float]) -> float:
     """World-unit orthographic scale. Fixed mode ignores per-clip size."""
     if settings.framing_mode == "fixed" and settings.framing_scale > 0:
         return float(settings.framing_scale)
     aspect = float(settings.frame_width) / max(float(settings.frame_height), 1e-9)
-    return fit_ortho_extent(size, settings.fit_basis, aspect) * float(settings.ortho_scale_mult)
+    extent = fit_ortho_extent(size, settings.fit_basis, aspect)
+    reserved = fit_reserved_fraction(settings.anchor)
+    return extent / (1.0 - reserved) * float(settings.ortho_scale_mult)
 
 
 def framing_target(
@@ -204,7 +217,7 @@ class RenderSettings:
 
     # --- Shared framing (locked scale / anchor for related clips) ---
     framing_mode: str = "fit"       # fit | fixed
-    fit_basis: str = "height"       # height | width | contain; fit mode only
+    fit_basis: str = "contain"      # height | width | contain; fit mode only
     framing_scale: float = 2.0      # world-unit ortho scale when framing_mode is fixed
     framing_origin_x: float = 0.0   # world-unit look-at; used only in fixed mode
     framing_origin_y: float = 0.0
@@ -214,7 +227,7 @@ class RenderSettings:
     output_offset_y: int = 0
 
     # --- Camera ---
-    ortho_scale_mult: float = 1.8
+    ortho_scale_mult: float = 1.0   # extra margin beyond automatic fill; 1.0 = fill the cell
     camera_distance: float = 2.52
     camera_pitch: float = 90.0
 
