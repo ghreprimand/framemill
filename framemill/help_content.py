@@ -568,9 +568,11 @@ ARTICLES: list[Article] = [
             )),
             ("p", _t(
                 "Adaptive palettes can vary across sheets. Use Master palette to share a scene ",
-                "palette (an indexed BMP is fine). Adaptive still puts a missing magic-pink key ",
-                "at index 0. A supplied master palette keeps its exact index order and errors ",
-                "if the key colour is absent.",
+                "palette (an indexed BMP is fine). Custom fixed colours is a typed index list ",
+                "you build in the export dialog. Adaptive still puts a missing magic-pink key ",
+                "at index 0. A supplied master palette or fixed list keeps its exact index ",
+                "order and errors if the key colour is absent. See What a master palette file ",
+                "is and how to create one.",
             )),
             ("h", "Metadata sidecar"),
             ("p", _t(
@@ -607,8 +609,68 @@ ARTICLES: list[Article] = [
                 "stops with an error instead of inserting it at index 0 (that would shift every ",
                 "other colour). Adaptive palettes still place a missing key at index 0.",
             )),
+            ("note", _t(
+                "How to make or extract that file: see What a master palette file is and how ",
+                "to create one. For a typed index list instead of a file, see Custom fixed colours.",
+            )),
         ],
         ("master palette", "dos palette", "index 0", "allegro", "bg_00"),
+    ),
+    Article(
+        "custom-fixed-colours", "Custom fixed colours", "export",
+        [
+            ("p", _t(
+                "Custom fixed colours is a typed palette: you enter MULTIPLE colours, and the ",
+                "order you put them in is the palette index. The first colour is index 0, the ",
+                "second is index 1, and so on.",
+            )),
+            ("p", "How to build the list:"),
+            ("li", [
+                "Type one or more #RRGGBB codes and press Enter or Add. Spaces or commas separate several codes in one paste.",
+                "Each row is a swatch, the hex value, and an index badge. Remove a row with the close icon.",
+                "Drag rows to reorder. Index badges update so the new first colour is still index 0.",
+                "Add magic pink inserts #ff00ff. Clear all empties the list.",
+                "Pick a colour opens RGB sliders (0 to 255) bound to the hex field. It starts collapsed.",
+            ]),
+            ("p", _t(
+                "For 8-bit DOS transparency, put magic pink (#ff00ff) first so transparent ",
+                "pixels map to index 0. This is a typed list, not a file. Master palette loads ",
+                "an indexed image or .pal/.gpl/.hex instead. Both reject a missing magic-pink ",
+                "key; neither reorders a supplied list to insert it.",
+            )),
+            ("note", _t(
+                "See also: DOS master palette, and What a master palette file is and how to create one.",
+            )),
+        ],
+        ("custom colours", "fixed colours", "index 0", "#ff00ff"),
+    ),
+    Article(
+        "create-master-palette", "What a master palette file is and how to create one", "export",
+        [
+            ("p", _t(
+                "A master palette file is an indexed image (BMP, PNG, or GIF) or a .pal / .gpl / .hex ",
+                "file whose colour ORDER is preserved exactly. The sprite sheet is quantized to ",
+                "that same table so it shares a scene's global 256-colour palette, for example ",
+                "the game's BG_00.BMP.",
+            )),
+            ("p", "How to create or extract one:"),
+            ("li", [
+                "Open the scene image in GIMP or Aseprite.",
+                "Convert it to indexed colour using the exact scene palette (do not let the editor generate a new one).",
+                "Export the indexed image, or export the palette as .pal or .gpl.",
+                "Or point framemill straight at the shared indexed BMP. The embedded palette is read in index order.",
+            ]),
+            ("p", _t(
+                "The transparent key (magic pink #ff00ff) must exist in the palette, usually at ",
+                "index 0. framemill will not reorder or prepend a supplied master palette, so ",
+                "indices stay in sync with the scene. A truecolour photo has no fixed palette ",
+                "and is rejected. If you would rather type the colours, use Custom fixed colours.",
+            )),
+            ("note", _t(
+                "See also: DOS master palette (export steps) and Custom fixed colours (typed list).",
+            )),
+        ],
+        ("master palette file", "create palette", "index 0", "bg_00", "gimp", "aseprite"),
     ),
     Article(
         "direction-orientation", "South, sheet order and yaw", "orientation",
@@ -1297,7 +1359,7 @@ ARTICLES: list[Article] = [
             options="Adaptive (from this sheet), Master palette (share a scene palette), Custom fixed colours",
             default="Adaptive",
             effect="Chooses the index table.",
-            gotcha="Master palette keeps exact index order. Adaptive may put a missing magic-pink key at index 0.",
+            gotcha="Master palette and Custom fixed colours keep exact index order. Adaptive may put a missing magic-pink key at index 0.",
         )
         + _ctl(
             "Maximum colours",
@@ -1316,12 +1378,12 @@ ARTICLES: list[Article] = [
             gotcha="Visible only when Palette is Master palette. A truecolour image is rejected. Missing magic pink is an error.",
         )
         + _ctl(
-            "Fixed colours · #RRGGBB",
-            "Type a custom palette as space-separated hex colours.",
-            options="#RRGGBB tokens",
+            "Custom fixed colours",
+            "Build a typed palette as an ordered list of colours.",
+            options="Swatch list with index badges; #RRGGBB add field (spaces or commas); RGB sliders; Add magic pink; drag to reorder; Clear all",
             default="Empty",
-            effect="Exact index list for engines that require it.",
-            gotcha="Visible only when Palette is Fixed. A missing key colour is an error; the list is not reordered.",
+            effect="The first colour is index 0. Transparent pixels map to the magic-pink index when that key is present.",
+            gotcha="Visible only when Palette is Custom fixed colours. A missing key colour is an error; the list is not reordered or prepended.",
         )
         + _ctl(
             "Write JSON sidecar",
@@ -1386,7 +1448,8 @@ CONTROL_KEYWORDS: tuple[str, ...] = (
     "phase", "anchor", "output preset", "write json sidecar", "recenter", "base size",
     "locate blender", "choose a model", "elevation", "source start", "first direction",
     "alpha cutoff", "viewer fps", "reset to defaults", "master palette",
-    "remove root motion",
+    "remove root motion", "custom colours", "fixed colours",
+    "master palette file", "create palette",
 )
 
 

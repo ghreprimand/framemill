@@ -1181,15 +1181,6 @@ def main(page: ft.Page) -> None:
                 build_export_controls()
                 refresh()
 
-        def fixed_changed(e):
-            try:
-                draft.fixed_palette = [export.hex_to_rgb(v.strip()) for v in e.control.value.replace(",", " ").split()]
-                refresh()
-            except ValueError:
-                export_error.value = "Enter colours as #RRGGBB separated by spaces."
-                save_btn.disabled = True
-                page.update()
-
         def load_preset(key):
             nonlocal draft, selected_preset
             if not key:
@@ -1198,6 +1189,160 @@ def main(page: ft.Page) -> None:
             draft = copy.deepcopy(EXPORT_PRESETS[key].config)
             build_export_controls()
             refresh()
+
+        def build_fixed_palette_controls():
+            swatch_host = ft.Column(spacing=6)
+            preview = ft.Container(width=22, height=22, bgcolor="#808080",
+                                   border=border(), border_radius=4)
+            hex_field = field("#", "", None, expand=True, hint_text="#rrggbb")
+            sliders = [
+                ft.Slider(value=128, min=0, max=255, divisions=255, label="{value}",
+                          active_color=ACCENT, expand=True)
+                for _ in range(3)
+            ]
+            syncing = {"hex": False}
+
+            def colours():
+                return list(draft.fixed_palette or [])
+
+            def set_preview(rgb):
+                hx = export.rgb_to_hex(rgb)
+                preview.bgcolor = hx
+                if syncing["hex"]:
+                    return
+                sliders[0].value = rgb[0]
+                sliders[1].value = rgb[1]
+                sliders[2].value = rgb[2]
+
+            def rebuild_swatches():
+                items = colours()
+                if not items:
+                    swatch_host.controls = [text(
+                        "No colours yet. Add one or more #RRGGBB values. The first colour is index 0.",
+                        11, MUTED)]
+                    return
+
+                def on_reorder(e):
+                    draft.fixed_palette = export.reorder_palette(
+                        colours(), e.old_index, e.new_index)
+                    rebuild_swatches()
+                    refresh()
+
+                def remove_at(idx):
+                    current = colours()
+                    if 0 <= idx < len(current):
+                        current.pop(idx)
+                    draft.fixed_palette = current
+                    rebuild_swatches()
+                    refresh()
+
+                rows = []
+                for i, rgb in enumerate(items):
+                    hx = export.rgb_to_hex(rgb)
+                    rows.append(ft.Container(
+                        content=ft.Row([
+                            ft.Container(text(str(i), 11, INK, ft.FontWeight.W_600),
+                                         bgcolor=ACCENT, padding=ft.Padding(6, 2, 6, 2),
+                                         border_radius=4),
+                            ft.Container(width=22, height=22, bgcolor=hx,
+                                         border=border(), border_radius=4),
+                            text(hx, 12, TEXT),
+                            ft.Container(expand=True),
+                            ft.IconButton(ft.Icons.CLOSE, icon_size=16, icon_color=MUTED,
+                                          tooltip="Remove this colour",
+                                          on_click=lambda e, idx=i: remove_at(idx)),
+                        ], spacing=8),
+                        padding=ft.Padding(4, 2, 4, 2),
+                    ))
+                swatch_host.controls = [ft.ReorderableListView(
+                    controls=rows, on_reorder=on_reorder, show_default_drag_handles=True,
+                    height=min(240, max(52, 44 * len(rows))), spacing=2)]
+
+            def commit_colours(added, *, replace=False):
+                current = [] if replace else colours()
+                room = 256 - len(current)
+                if room <= 0:
+                    export_error.value = "A fixed palette can have at most 256 colours."
+                    save_btn.disabled = True
+                    page.update()
+                    return
+                extra = added[:room]
+                current.extend(extra)
+                draft.fixed_palette = current
+                rebuild_swatches()
+                refresh()
+                if len(added) > room:
+                    export_error.value = "A fixed palette can have at most 256 colours."
+                    page.update()
+
+            def add_from_field(e=None):
+                try:
+                    added = export.parse_hex_colours(hex_field.value)
+                except ValueError:
+                    export_error.value = "Enter colours as #RRGGBB, separated by spaces or commas."
+                    save_btn.disabled = True
+                    page.update()
+                    return
+                if not added:
+                    return
+                hex_field.value = ""
+                commit_colours(added)
+
+            def add_magic_pink(e=None):
+                commit_colours([(255, 0, 255)])
+
+            def clear_all(e=None):
+                draft.fixed_palette = []
+                rebuild_swatches()
+                refresh()
+
+            def hex_live(e):
+                try:
+                    parsed = export.parse_hex_colours(hex_field.value)
+                except ValueError:
+                    return
+                if parsed:
+                    set_preview(parsed[0])
+                    page.update()
+
+            def slider_live(e):
+                rgb = tuple(int(slider.value) for slider in sliders)
+                syncing["hex"] = True
+                hex_field.value = export.rgb_to_hex(rgb)
+                set_preview(rgb)
+                syncing["hex"] = False
+                page.update()
+
+            hex_field.on_change = hex_live
+            hex_field.on_submit = add_from_field
+            for slider in sliders:
+                slider.on_change = slider_live
+            if colours():
+                set_preview(colours()[0])
+            rebuild_swatches()
+            return ft.Column([
+                text("Colours are indexed in list order. The first colour is index 0. "
+                     "For 8-bit DOS, put magic pink (#ff00ff) first so transparent pixels "
+                     "use index 0.", 11, MUTED),
+                swatch_host,
+                ft.Row([preview, hex_field,
+                        button("Add", ft.Icons.ADD, add_from_field)], spacing=8),
+                ft.ExpansionTile(
+                    "Pick a colour",
+                    controls=[
+                        ft.Row([text("R", 11, MUTED), sliders[0]], spacing=8),
+                        ft.Row([text("G", 11, MUTED), sliders[1]], spacing=8),
+                        ft.Row([text("B", 11, MUTED), sliders[2]], spacing=8),
+                    ],
+                    expanded=False, dense=True, bgcolor=CARD, collapsed_bgcolor=CARD,
+                    text_color=TEXT, icon_color=MUTED, collapsed_text_color=MUTED,
+                    collapsed_icon_color=MUTED, maintain_state=True,
+                ),
+                ft.Row([
+                    button("Add magic pink", ft.Icons.PALETTE_OUTLINED, add_magic_pink, expand=True),
+                    button("Clear all", ft.Icons.CLEAR_ALL, clear_all, expand=True),
+                ], spacing=8),
+            ], spacing=10, horizontal_alignment=ft.CrossAxisAlignment.STRETCH)
 
         def build_export_controls():
             indexed = draft.depth == 8
@@ -1261,9 +1406,7 @@ def main(page: ft.Page) -> None:
                     field("Palette path", draft.palette_path or "", lambda e: change_export("palette_path", e.control.value)),
                     palette_note]
             if indexed and draft.palette_source == "fixed":
-                export_controls.controls.append(field("Fixed colours · #RRGGBB", " ".join(
-                    f"#{c[0]:02x}{c[1]:02x}{c[2]:02x}" for c in draft.fixed_palette or []), fixed_changed,
-                    multiline=True, min_lines=2, max_lines=4))
+                export_controls.controls.append(build_fixed_palette_controls())
             export_controls.controls += [
                 ft.Divider(color=BORDER), caption("Animation metadata"),
                 ft.Switch(label="Write JSON sidecar", value=draft.write_metadata, active_color=ACCENT,

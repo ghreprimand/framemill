@@ -201,6 +201,19 @@ def test_adaptive_palette_prepends_missing_key_at_index_zero():
     assert out.getpixel((0, 0)) == key_index
 
 
+def test_parse_hex_colours_accepts_spaces_and_commas():
+    assert export.parse_hex_colours("") == []
+    assert export.parse_hex_colours("  #ff00ff, #c81e1e  #00f") == [
+        (255, 0, 255), (200, 30, 30), (0, 0, 255)]
+
+
+def test_reorder_palette_matches_flutter_index_shift():
+    colors = [(255, 0, 255), (200, 30, 30), (0, 0, 0)]
+    assert export.reorder_palette(colors, 0, 2) == [(200, 30, 30), (255, 0, 255), (0, 0, 0)]
+    assert export.reorder_palette(colors, 2, 0) == [(0, 0, 0), (255, 0, 255), (200, 30, 30)]
+    assert export.rgb_to_hex((255, 0, 255)) == "#ff00ff"
+
+
 def test_unknown_palette_suffix_is_rejected():
     import pytest
     with pytest.raises(ValueError, match="Palette file must"):

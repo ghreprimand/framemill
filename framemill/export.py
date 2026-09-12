@@ -90,6 +90,30 @@ def hex_to_rgb(s: str) -> RGB:
     return (int(s[0:2], 16), int(s[2:4], 16), int(s[4:6], 16))
 
 
+def rgb_to_hex(rgb: RGB) -> str:
+    return f"#{int(rgb[0]):02x}{int(rgb[1]):02x}{int(rgb[2]):02x}"
+
+
+def parse_hex_colours(text: str) -> list[RGB]:
+    """Parse one or more #RGB / #RRGGBB tokens separated by spaces or commas."""
+    tokens = [part.strip() for part in str(text).replace(",", " ").split() if part.strip()]
+    return [hex_to_rgb(token) for token in tokens]
+
+
+def reorder_palette(colors: list[RGB], old_index: int, new_index: int) -> list[RGB]:
+    """Reorder like Flutter ReorderableListView (new_index is the after-remove slot)."""
+    items = list(colors)
+    count = len(items)
+    if count < 2 or not (0 <= old_index < count) or old_index == new_index:
+        return items
+    dest = new_index
+    if old_index < dest:
+        dest -= 1
+    dest = max(0, min(dest, count - 1))
+    items.insert(dest, items.pop(old_index))
+    return items
+
+
 # ----------------------------------------------------------------- passes
 def dilate_edges(img: Image.Image, iterations: int) -> Image.Image:
     """Bleed border colour outward into transparent pixels (alpha preserved).

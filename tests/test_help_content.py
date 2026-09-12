@@ -19,6 +19,12 @@ def test_search_empty_and_keywords():
     assert help_content.search("dos palette")
     assert help_content.search("index 0")
     assert help_content.search("remove root motion")
+    assert help_content.search("custom colours")[0].id == "custom-fixed-colours"
+    assert help_content.search("fixed colours")
+    assert help_content.search("master palette file")[0].id == "create-master-palette"
+    assert help_content.search("create palette")
+    assert help_content.article_by_id("custom-fixed-colours").category == "export"
+    assert help_content.article_by_id("create-master-palette").category == "export"
 
 
 def test_title_ranks_above_body_only():
