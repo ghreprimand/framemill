@@ -73,6 +73,7 @@ Detailed docs live in [`docs/`](docs/README.md):
 | [Installation](docs/installation.md) | pipx, AppImage, or from source; per-platform install and update commands; Blender setup. |
 | [Command line (CLI)](docs/cli.md) | `render`, `inspect`, and every flag, for scripting and CI. |
 | [Settings reference](docs/settings-reference.md) | Every render and export control, its effect, and its default. |
+| [Export and palettes](docs/export-and-palettes.md) | Formats, depths, backgrounds, and adaptive / master / fixed palettes, plus building a master palette. |
 | [Recipes & metadata](docs/recipes-and-metadata.md) | The portable recipe file and the JSON metadata sidecar, field by field. |
 | [Direction & orientation](docs/orientation.md) | The South-is-front convention, sheet order, and matching your engine. |
 | [Architecture](docs/architecture.md) | How the model, Blender, compositor, and sheet pipeline fit together. |

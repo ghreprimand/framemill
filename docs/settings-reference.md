@@ -4,6 +4,10 @@ Defaults shown are the built-in values before any preset or saved config. The GU
 these under **Sprite geometry**, **Appearance**, and **Layout & timing**; the values live
 in `framemill/settings.py` (`RenderSettings`) and `framemill/export.py` (`ExportConfig`).
 
+**Reset to defaults** in the export dialog returns the render and export settings to the
+values in this table (export goes back to PNG RGBA). It keeps the loaded model and the
+Blender path, and asks for confirmation first.
+
 ## Sprite geometry
 
 | Setting | Default | Notes |
@@ -107,7 +111,8 @@ or prepended, so an 8-bit sheet can share a scene's global palette (for example 
 game's `BG_00.BMP`). For indexed output the transparent key (magic pink) must be present
 in the palette, usually at index 0; if it is missing the export stops with a clear error.
 Adaptive palettes place the key at index 0 automatically. See
-[Recipes & metadata](recipes-and-metadata.md) for how to build and share a master palette.
+[Export and palettes](export-and-palettes.md) for the palette modes and how to build and
+share a master palette.
 
 Built-in export presets: PNG RGBA (modern), PNG engine atlas (dilated), TGA magic-pink
 (legacy 2D), and BMP 8-bit indexed (DOS). See [Recipes & metadata](recipes-and-metadata.md)

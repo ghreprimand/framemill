@@ -30,26 +30,9 @@ match. Unknown fields are rejected.
 
 ## Master palettes
 
-For 8-bit indexed output you can lock a sheet to a specific palette instead of letting
-framemill build an adaptive one. Two ways:
-
-- **Master palette (file)**: point framemill at a palette file. It accepts an indexed
-  image (`.bmp`, `.png`, `.gif`) or a palette list (`.pal`, `.gpl`, `.hex`). The colour
-  order is read and kept exactly.
-- **Custom fixed colours**: type an ordered list of `#RRGGBB` colours in the export dialog.
-  The first colour is index 0, the second index 1, and so on.
-
-Why the order matters: a DOS scene shares one 256-colour palette across its background and
-its sprites (for example the game's `BG_00.BMP`). If framemill reordered the colours, the
-sheet would no longer line up with that shared palette, so it never reorders or prepends a
-supplied palette. For indexed output the transparent key (magic pink `#ff00ff`) must exist
-in the palette, usually at index 0; if it is missing the export stops with a clear message.
-Adaptive palettes place the key at index 0 automatically.
-
-To build a master palette from a scene image: open it in an editor such as GIMP or Aseprite,
-convert to indexed mode with the exact palette you want (magic pink at index 0 for DOS),
-then either save that indexed image and point framemill at it, or export the palette itself
-as `.pal` or `.gpl`. You can also point framemill straight at the shared indexed BMP.
+Export formats, colour depths, and the three palette modes (adaptive, master palette file,
+and custom fixed colours), plus how to build a master palette that shares a scene's exact
+colours, are covered in [Export and palettes](export-and-palettes.md).
 
 ## Metadata sidecar
 

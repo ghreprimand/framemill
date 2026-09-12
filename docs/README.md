@@ -17,6 +17,8 @@ pages below go deeper.
 
 - **[Settings reference](settings-reference.md):** every render and export control, what
   it does, and its default.
+- **[Export and palettes](export-and-palettes.md):** formats, colour depths, backgrounds,
+  and the adaptive / master / fixed palette modes, including how to build a master palette.
 - **[Recipes & metadata](recipes-and-metadata.md):** the portable recipe file and the
   optional JSON metadata sidecar, field by field.
 - **[Direction & orientation](orientation.md):** the South-is-front convention, sheet
