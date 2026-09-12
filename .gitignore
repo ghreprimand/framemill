@@ -33,6 +33,18 @@ Thumbs.db
 scratch/
 sample_models/
 
+# Source models (inputs only, never repo content) and rendered/demo output.
+# Guards against committing game assets or generated sprite sheets.
+*.fbx
+*.glb
+*.gltf
+*.obj
+*.tga
+*.bmp
+/*.png
+/renders/
+/out/
+
 # Private local orchestration and environment data
 .archon/
 .env
