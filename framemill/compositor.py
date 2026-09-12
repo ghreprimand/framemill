@@ -5,11 +5,13 @@ Pure Pillow: centre-crop to target aspect, Lanczos downscale, tile, encode.
 """
 from __future__ import annotations
 
+import io
 from collections.abc import Callable
 from pathlib import Path
 
 from PIL import Image
 
+from .atomicio import atomic_write_bytes, write_all
 from .settings import RenderSettings
 
 ProgressFn = Callable[[int, int, str], None]
@@ -88,8 +90,14 @@ def build_sheet(frames_dir: Path, settings: RenderSettings,
     return sheet
 
 
+def encode_png(sheet: Image.Image) -> bytes:
+    buf = io.BytesIO()
+    sheet.save(buf, format="PNG")
+    return buf.getvalue()
+
+
 def save_png(sheet: Image.Image, out_path: Path) -> None:
-    sheet.save(out_path, format="PNG")
+    atomic_write_bytes(out_path, encode_png(sheet))
 
 
 def encode_tga(sheet: Image.Image, magic_pink: bool = False) -> bytes:
@@ -110,21 +118,23 @@ def encode_tga(sheet: Image.Image, magic_pink: bool = False) -> bytes:
 
 
 def save_tga(sheet: Image.Image, out_path: Path, magic_pink: bool = False) -> None:
-    out_path.write_bytes(encode_tga(sheet, magic_pink=magic_pink))
+    atomic_write_bytes(out_path, encode_tga(sheet, magic_pink=magic_pink))
+
+
+def encode_outputs(sheet: Image.Image, out_path: Path, formats: list[str],
+                   magic_pink: bool = False) -> dict[Path, bytes]:
+    """Encode each requested format in memory. Does not touch disk."""
+    stem = Path(out_path).with_suffix("")
+    encoded: dict[Path, bytes] = {}
+    if "png" in formats:
+        encoded[stem.with_suffix(".png")] = encode_png(sheet)
+    if "tga" in formats:
+        encoded[stem.with_suffix(".tga")] = encode_tga(sheet, magic_pink=magic_pink)
+    return encoded
 
 
 def composite(frames_dir: Path, out_path: Path, settings: RenderSettings,
               formats: list[str], magic_pink: bool = False,
               progress: ProgressFn | None = None) -> list[Path]:
     sheet = build_sheet(frames_dir, settings, progress=progress)
-    written: list[Path] = []
-    stem = out_path.with_suffix("")
-    if "png" in formats:
-        p = stem.with_suffix(".png")
-        save_png(sheet, p)
-        written.append(p)
-    if "tga" in formats:
-        p = stem.with_suffix(".tga")
-        save_tga(sheet, p, magic_pink=magic_pink)
-        written.append(p)
-    return written
+    return write_all(encode_outputs(sheet, out_path, formats, magic_pink=magic_pink))

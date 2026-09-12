@@ -6,6 +6,7 @@ import os
 from dataclasses import asdict, dataclass, fields
 from pathlib import Path
 
+from .atomicio import atomic_write_bytes
 from .export import ExportConfig, validate_config
 from .settings import RenderSettings, resolved_anim_range
 
@@ -244,7 +245,11 @@ def sidecar_path(image_path: Path) -> Path:
     return Path(image_path).with_name(Path(image_path).stem + ".json")
 
 
+def encode_metadata(payload: dict) -> bytes:
+    return (json.dumps(payload, indent=2) + "\n").encode("utf-8")
+
+
 def write_metadata(image_path: Path, payload: dict) -> Path:
     dest = sidecar_path(image_path)
-    dest.write_text(json.dumps(payload, indent=2) + "\n")
+    atomic_write_bytes(dest, encode_metadata(payload))
     return dest

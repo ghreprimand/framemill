@@ -8,7 +8,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-from . import __version__, blender, compositor, recipe, shortcut
+from . import __version__, atomicio, blender, compositor, recipe, shortcut
 from .settings import DEFAULT_PRESET, PRESETS, RenderSettings
 
 CLI_FORMATS = {"png", "tga"}
@@ -57,6 +57,23 @@ def _settings_from_args(a: argparse.Namespace) -> tuple[RenderSettings, str, str
     return settings, model, idle
 
 
+def _write_render_outputs(sheet, out: Path, formats: list[str], magic_pink: bool,
+                          metadata_payload: dict | None = None) -> list[Path]:
+    """Encode every sheet and sidecar, then promote the batch together."""
+    payloads: dict[Path, bytes] = {}
+    printed: list[Path] = []
+    meta_bytes = None if metadata_payload is None else recipe.encode_metadata(metadata_payload)
+    for path, data in compositor.encode_outputs(sheet, out, formats, magic_pink).items():
+        payloads[path] = data
+        printed.append(path)
+        if meta_bytes is not None:
+            side = recipe.sidecar_path(path)
+            payloads[side] = meta_bytes
+            printed.append(side)
+    atomicio.write_all(payloads)
+    return printed
+
+
 def _cmd_render(a: argparse.Namespace) -> None:
     try:
         settings, model, idle = _settings_from_args(a)
@@ -81,20 +98,23 @@ def _cmd_render(a: argparse.Namespace) -> None:
         blender.render(bpath, model, frames_dir, settings,
                        idle_path=idle, on_progress=prog)
         print()
-        written = compositor.composite(frames_dir, out, settings, formats,
-                                       magic_pink=a.magic_pink)
-    for p in written:
-        print(f"wrote {p}")
+        sheet = compositor.build_sheet(frames_dir, settings)
+        meta = None
         if a.metadata:
-            dest = recipe.write_metadata(p, recipe.animation_metadata(
+            meta = recipe.animation_metadata(
                 settings, clip_name=Path(model).stem,
                 source_start=None if inspected is None else inspected.get("frame_start"),
                 source_end=None if inspected is None else inspected.get("frame_end"),
                 source_fps=None if inspected is None else inspected.get("fps"),
                 replacement_used=bool(idle),
                 replacement_name=Path(idle).name if idle else None,
-            ))
-            print(f"wrote {dest}")
+            )
+        try:
+            written = _write_render_outputs(sheet, out, formats, a.magic_pink, meta)
+        except Exception as exc:  # noqa: BLE001  user-facing CLI error
+            sys.exit(f"Could not write outputs: {exc}")
+    for path in written:
+        print(f"wrote {path}")
 
 
 def _cmd_inspect(a: argparse.Namespace) -> None:
