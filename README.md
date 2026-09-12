@@ -50,6 +50,10 @@ framemill            # launches the GUI
 framemill install-shortcut   # adds framemill to your application launcher
 ```
 
+First time using pipx? Run `pipx ensurepath` once, then close and reopen your terminal so
+the `framemill` command is on your PATH. On Windows, if `pipx` itself is not found yet, use
+`python -m pipx install framemill` until you reopen.
+
 `install-shortcut` adds a menu/launcher entry (a `.desktop` entry on Linux, an app bundle
 on macOS, a Start Menu shortcut on Windows); `uninstall-shortcut` removes it. You can also
 do it from the GUI with **Add to applications**.
