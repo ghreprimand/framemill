@@ -18,6 +18,19 @@ def _t(*parts: str) -> str:
     return "".join(parts)
 
 
+def _ctl(name: str, what: str, *, options: str, default: str, effect: str, gotcha: str) -> list[Block]:
+    return [
+        ("h", name),
+        ("p", what),
+        ("li", [
+            f"Range or options: {options}",
+            f"Default: {default}",
+            f"Effect: {effect}",
+            f"Gotcha: {gotcha}",
+        ]),
+    ]
+
+
 @dataclass(frozen=True)
 class Category:
     id: str
@@ -69,6 +82,8 @@ CATEGORIES: list[Category] = [
              "Headless Blender pipeline, compositor, config vs recipe."),
     Category("about", "About", 13,
              "Version, license, and project links."),
+    Category("reference", "Reference: every control", 14,
+             "Element-level notes for every control you can touch."),
 ]
 
 
@@ -576,7 +591,656 @@ ARTICLES: list[Article] = [
         ],
         ("license", "gpl", "version", "unfinished works"),
     ),
+    Article(
+        "ref-workspace", "Top bar and viewer controls", "reference",
+        [
+            ("p", "Main workspace chrome: loading, render, view, playback, and status."),
+        ]
+        + _ctl(
+            "Choose a model",
+            "Opens a source file. Desktop uses the native picker. The browser preview asks for an absolute path.",
+            options="fbx, glb, gltf, obj",
+            default="No source loaded",
+            effect="Loads the model, inspects its action range, and starts a South-facing preview.",
+            gotcha="Keep glTF buffers/textures or OBJ materials next to the file. A missing mesh renders blank.",
+        )
+        + _ctl(
+            "Preview",
+            "Renders a single facing so you can judge look and framing.",
+            options="Uses current settings and the selected facing (South on first load)",
+            default="Automatic after load and after camera/light/timing edits",
+            effect="Shows a disposable 1-frame view. Does not become the export.",
+            gotcha="A later preview never replaces a completed sheet. Export still uses the last Render sheet.",
+        )
+        + _ctl(
+            "Render sheet",
+            "Renders every direction and frame into the exportable sheet.",
+            options="Full directions × frames job",
+            default="Off until you click it",
+            effect="Replaces the last completed sheet and enables Export.",
+            gotcha="Locks the sidebar while running. Cancel stops it. Layout-only fields (angles, order) need this to update the sheet.",
+        )
+        + _ctl(
+            "Export sprite sheet",
+            "Opens the export dialog on the last completed sheet.",
+            options="Enabled only after a successful Render sheet",
+            default="Disabled",
+            effect="Lets you choose format, colour, palette, and destination without rendering again.",
+            gotcha="Stays available after auto-previews. The dialog preview is processed output, not a new Blender job.",
+        )
+        + _ctl(
+            "Cancel render",
+            "Stops the in-progress Blender job.",
+            options="Visible only while busy",
+            default="Hidden",
+            effect="Invalidates queued preview work so a leftover timer cannot restart.",
+            gotcha="A queued Render sheet still starts after an interrupted preview. User cancel does not keep a stale preview timer.",
+        )
+        + _ctl(
+            "Sprite / Sheet tabs",
+            "Switch between one cell and the tiled sheet.",
+            options="Sprite or Sheet",
+            default="Sprite",
+            effect="Sheet shows the last completed exportable sheet when one exists.",
+            gotcha="Sheet view is empty until you have rendered a sheet. Sprite can show a 1-frame preview.",
+        )
+        + _ctl(
+            "Recenter",
+            "Resets pan and gesture zoom on the viewer.",
+            options="Icon button (center-focus)",
+            default="Centered, 1× gesture zoom",
+            effect="Puts the sprite or sheet back in the middle of the viewport.",
+            gotcha="Does not change Base size, export crop, or camera framing.",
+        )
+        + _ctl(
+            "Base size",
+            "Display scale of a sprite cell in the viewer.",
+            options="100%, 200%, 300%, 400%, 600%",
+            default="300%",
+            effect="Changes how large the cell is drawn. Export pixels stay the same.",
+            gotcha="This is not framing. Use Fit multiplier or Fixed world scale to change the crop.",
+        )
+        + _ctl(
+            "Checkerboard",
+            "Shows or hides the transparency backdrop.",
+            options="On or off",
+            default="On",
+            effect="Helps you see alpha vs opaque pixels.",
+            gotcha="Display only. It is not written into the export.",
+        )
+        + _ctl(
+            "Facing buttons",
+            "Change the viewed direction: S, SW, W, NW, N, NE, E, SE (or Front when angles is 1).",
+            options="Eight compass names on a preview; sheet layout names after Render sheet",
+            default="South (front) on a new source",
+            effect="Before a sheet exists, requests another Blender preview. Afterward, switches instantly inside the sheet.",
+            gotcha="View only. Never changes sheet order or source yaw.",
+        )
+        + _ctl(
+            "Frame strip",
+            "Thumbnails for each sampled frame of the current direction.",
+            options="One tile per frame (1 on a preview)",
+            default="Frame 1 selected",
+            effect="Click a tile to inspect that frame.",
+            gotcha="Preview has a single tile. Playback uses the last completed sheet when one exists.",
+        )
+        + _ctl(
+            "Play / pause",
+            "Animates the current direction at the viewer FPS.",
+            options="Play or pause",
+            default="Paused",
+            effect="Steps through sheet frames. One-shot stops on the last frame.",
+            gotcha="Viewer FPS is display speed only. It is not written into the image. Use the metadata sidecar for playback_fps.",
+        )
+        + _ctl(
+            "Viewer FPS",
+            "Playback speed for the Play control.",
+            options="4, 6, 8, 12, 16, 24 fps",
+            default="8 fps",
+            effect="How fast the strip advances while playing.",
+            gotcha="Does not change how densely the source is sampled. Frame count does that.",
+        )
+        + _ctl(
+            "Viewer gestures",
+            "Drag to pan. Scroll or pinch to zoom.",
+            options="Pan any amount; gesture zoom about 0.25× to 8×",
+            default="Centered, 1×",
+            effect="Lets you inspect pixels. Recenter resets it.",
+            gotcha="Display only. Does not change export crop, offsets, or camera.",
+        )
+        + _ctl(
+            "Locate Blender",
+            "Footer chip: connected version, or pick the executable once.",
+            options="Auto-detect, PATH, or a remembered path",
+            default="Whatever find_blender locates",
+            effect="Stores the path in user config. Required before any render.",
+            gotcha="The browser preview cannot pick a new executable; set it in the desktop app or on PATH.",
+        )
+        + _ctl(
+            "Help",
+            "Opens this browser.",
+            options="Search, category nav, Back to workspace",
+            default="Hidden below 1000 px window width",
+            effect="Starts on Getting started.",
+            gotcha="Search replaces the category tree with ranked results until you clear the field.",
+        )
+        + _ctl(
+            "Status line and progress bar",
+            "Current activity, errors, and render progress.",
+            options="Text plus a thin bar while busy",
+            default="Choose a model to begin",
+            effect="Shows inspect, preview, sheet, and export messages.",
+            gotcha="A failed job prints the error here. Correct highlighted fields before rendering.",
+        ),
+        ("choose a model", "recenter", "base size", "locate blender", "frame strip",
+         "checkerboard", "viewer fps"),
+    ),
+    Article(
+        "ref-source", "Source panel controls", "reference",
+        [
+            ("p", "01 / Source: the loaded model, detected clip, recipes, and appearance preset."),
+        ]
+        + _ctl(
+            "Model card",
+            "Shows the loaded file name, format, and size. The folder icon reopens the picker.",
+            options="fbx, glb, gltf, obj",
+            default="No source loaded",
+            effect="Same as Choose a model.",
+            gotcha="Loading a new source clears the last completed sheet.",
+        )
+        + _ctl(
+            "Detected clip line",
+            "Action name, start, end, span, and source FPS after inspect.",
+            options="Read-only; updated after load",
+            default="Load a model to read its animation range.",
+            effect="Tells you what range Source start/end will trim.",
+            gotcha="Uses the first active action on an imported object, or the scene range. No NLA picker.",
+        )
+        + _ctl(
+            "Load recipe",
+            "Restores a versioned project file: source, idle, render settings, and export config.",
+            options="*.recipe.json (desktop picker or absolute path on the web)",
+            default="None",
+            effect="Loads the recipe source and applies its settings.",
+            gotcha="A missing source is rejected and does not keep applying settings onto the old model.",
+        )
+        + _ctl(
+            "Save recipe",
+            "Writes a versioned JSON file with relative source paths.",
+            options="Desktop save picker or absolute path on the web",
+            default="None",
+            effect="Portable project next to your sources, separate from user config.",
+            gotcha="User config still remembers Blender and last-used settings on this machine.",
+        )
+        + _ctl(
+            "Appearance preset",
+            "Copies camera, light, and colour settings from Generic PBR, Tripo, or Mixamo.",
+            options="Generic PBR, Tripo, Mixamo, Custom appearance",
+            default="Whatever matches the current sliders (often Tripo after first use)",
+            effect="Leaves directions, frames, layout, and animation choices intact.",
+            gotcha="Moving a slider after a preset shows Custom appearance.",
+        ),
+        ("load recipe", "save recipe", "appearance preset", "detected clip"),
+    ),
+    Article(
+        "ref-geometry", "Sprite geometry controls", "reference",
+        [
+            ("p", "02 / Sprite geometry: cell size, direction count, frame count, and the sheet readout."),
+        ]
+        + _ctl(
+            "Width · px",
+            "Width of one sprite cell in the finished sheet.",
+            options="1 to 1024 pixels",
+            default="96",
+            effect="Sets cell width and the sheet width (with layout).",
+            gotcha="Oversized sheets are rejected before render. This is export size, not Base size.",
+        )
+        + _ctl(
+            "Height · px",
+            "Height of one sprite cell in the finished sheet.",
+            options="1 to 1024 pixels",
+            default="128",
+            effect="Sets cell height and the sheet height (with layout).",
+            gotcha="Fit mode still crops to this aspect. Extreme poses can clip.",
+        )
+        + _ctl(
+            "Directions",
+            "How many camera headings are rendered.",
+            options="1, 4, 8, 16",
+            default="8",
+            effect="Changes sheet layout and the facing-button set after Render sheet.",
+            gotcha="Does not auto-preview. Render sheet to bake the new layout. Does not rotate the mesh.",
+        )
+        + _ctl(
+            "Frames",
+            "How many samples are taken along the source range, per direction.",
+            options="1 to 64",
+            default="4",
+            effect="Sampling density. Odd counts such as 11 are valid.",
+            gotcha="Not duration. A static source repeats the same pose. Zero or negative is rejected.",
+        )
+        + _ctl(
+            "Geometry readout",
+            "Computed sheet pixels, sprite count (directions × frames), and estimated RGBA MiB.",
+            options="Read-only",
+            default="Updates as you edit geometry",
+            effect="Warns you before a huge sheet.",
+            gotcha="The estimate is uncompressed RGBA. Validation can still reject the job.",
+        ),
+        ("width · px", "height · px", "directions", "frames", "sheet size"),
+    ),
+    Article(
+        "ref-appearance", "Appearance controls", "reference",
+        [
+            ("p", "03 / Studio → Appearance: camera, light, and colour. These refresh the preview after a short pause."),
+        ]
+        + _ctl(
+            "Elevation · 90° is level",
+            "Camera pitch around the character.",
+            options="30° to 120°, 1° steps",
+            default="90°",
+            effect="Below 90 looks down from above. 90 is level.",
+            gotcha="This is not orbit in 3D. There is no free tumble.",
+        )
+        + _ctl(
+            "Framing mode",
+            "How the orthographic scale and look-at are chosen.",
+            options="Fit this clip, or Fixed world scale",
+            default="Fit this clip",
+            effect="Fit uses this clip's bounds. Fixed uses your scale and origin on every clip.",
+            gotcha="Related walk/idle/attack sheets need Fixed world scale and the same origin. Fit will shift if poses differ.",
+        )
+        + _ctl(
+            "Fit multiplier",
+            "Scale factor on the fitted orthographic size. Visible in Fit mode.",
+            options="0.5× to 4×",
+            default="1.8×",
+            effect="Larger values make the model smaller in the cell.",
+            gotcha="Hidden in Fixed mode. Viewer zoom does not change this.",
+        )
+        + _ctl(
+            "Fixed world scale",
+            "World-unit orthographic scale. Visible in Fixed mode.",
+            options="Positive world units",
+            default="2.0",
+            effect="Identical size across clips that share this value.",
+            gotcha="Hidden in Fit mode. Larger makes the model smaller.",
+        )
+        + _ctl(
+            "World origin X / Y / Z",
+            "World-unit look-at point used only in Fixed mode.",
+            options="Any finite world coordinates",
+            default="0, 0, 0",
+            effect="The camera aims here on every clip.",
+            gotcha="Do not use per-clip bounds XY in Fixed mode. Set an explicit origin (often the root at 0,0,0).",
+        )
+        + _ctl(
+            "Anchor",
+            "Vertical aim in Fit mode: bounds centre or feet / lowest point.",
+            options="Bounds centre, Feet / lowest point",
+            default="Bounds centre",
+            effect="Shifts the crop up or down in Fit mode.",
+            gotcha="Hidden in Fixed mode. Fixed uses the world origin instead.",
+        )
+        + _ctl(
+            "Offset X · px / Offset Y · px",
+            "Nudge the finished cell after framing.",
+            options="Signed integers, pixels",
+            default="0, 0",
+            effect="+X right, +Y down in the cell.",
+            gotcha="Finished-cell pixels, not world units. Viewer pan is not this.",
+        )
+        + _ctl(
+            "Orbit distance · camera and light",
+            "Places the camera and the key light.",
+            options="0.5 to 10",
+            default="2.52",
+            effect="Moves both the camera and the light farther or closer.",
+            gotcha="Orbit distance is not zoom. Use Framing or Fixed world scale to change how large the character is.",
+        )
+        + _ctl(
+            "Light energy",
+            "Strength of the key light.",
+            options="0 to 3000",
+            default="1000",
+            effect="Brighter or dimmer direct light.",
+            gotcha="0 is unlit except for ambient. Updates the preview after a pause.",
+        )
+        + _ctl(
+            "Softness",
+            "Shadow soft size on the key light.",
+            options="0 to 2",
+            default="0.1",
+            effect="Softer or harder shadows.",
+            gotcha="Does not change silhouette size.",
+        )
+        + _ctl(
+            "Light colour",
+            "Key light colour as #RGB or #RRGGBB.",
+            options="#hex",
+            default="#FFFFFF",
+            effect="Tints the key light.",
+            gotcha="Invalid hex is rejected on the field.",
+        )
+        + _ctl(
+            "Ambient strength",
+            "Fill light in the shadows.",
+            options="0 to 8",
+            default="1.0",
+            effect="Lifts or crushes the dark side.",
+            gotcha="Travels with appearance presets.",
+        )
+        + _ctl(
+            "Ambient colour",
+            "Fill colour as #hex.",
+            options="#hex",
+            default="#FFFFFF",
+            effect="Tints the ambient.",
+            gotcha="Invalid hex is rejected on the field.",
+        )
+        + _ctl(
+            "View transform",
+            "Blender colour management transform.",
+            options="Standard, AgX, Filmic",
+            default="Standard",
+            effect="How render colours are mapped to the sprite.",
+            gotcha="Presets may change this. Compare related clips with the same transform.",
+        )
+        + _ctl(
+            "Exposure",
+            "Colour-management exposure.",
+            options="-3 to 3",
+            default="0",
+            effect="Overall brightness after lighting.",
+            gotcha="Not the same as Light energy.",
+        )
+        + _ctl(
+            "Gamma",
+            "Colour-management gamma.",
+            options="0.2 to 3",
+            default="1.0",
+            effect="Contrast of the mapped colours.",
+            gotcha="Very low values crush midtones.",
+        )
+        + _ctl(
+            "Specular IOR",
+            "Specular reflection amount on the material.",
+            options="0 to 1",
+            default="0.5",
+            effect="Shinier or flatter highlights.",
+            gotcha="Does not change metalness. Updates the preview after a pause.",
+        ),
+        ("orbit distance", "fit multiplier", "specular ior", "fixed world scale",
+         "output offset", "elevation"),
+    ),
+    Article(
+        "ref-layout", "Layout and timing controls", "reference",
+        [
+            ("p", "03 / Studio → Layout & timing: sheet order, source facing, sampling, and first-frame replacement."),
+        ]
+        + _ctl(
+            "First direction",
+            "Which heading is the first cell of the sheet.",
+            options="Names from the current direction set (S, N, E, W, and diagonals when present)",
+            default="S",
+            effect="Rotates the cell sequence. Does not rotate the mesh.",
+            gotcha="Does not auto-preview. Render sheet to bake order.",
+        )
+        + _ctl(
+            "Rotation",
+            "Walk the compass clockwise or counter-clockwise from the first direction.",
+            options="Clockwise, Counter-clockwise",
+            default="Clockwise",
+            effect="CW from N is N, NE, E, SE, S, SW, W, NW.",
+            gotcha="Sheet order only. Source facing is separate.",
+        )
+        + _ctl(
+            "Sheet layout",
+            "Whether directions run as rows or as columns.",
+            options="Directions as rows, Directions as columns",
+            default="Directions as rows",
+            effect="Rows: directions down, frames across. Columns: the transpose.",
+            gotcha="Does not auto-preview. Match this mapping in your engine.",
+        )
+        + _ctl(
+            "Resolved order",
+            "The actual output order for the current first direction, rotation, and count.",
+            options="Read-only",
+            default="Updates as you edit order",
+            effect="Copy this list into your game's direction table.",
+            gotcha="Do not assume an importer uses the same convention.",
+        )
+        + _ctl(
+            "Left 90° / Right 90°",
+            "Quarter-turn the imported source and its animation around world Z.",
+            options="±90° each click",
+            default="Yaw 0",
+            effect="Corrects a model that was authored facing the wrong axis.",
+            gotcha="Independent of preview facing and sheet order. Up-axis correction is not provided.",
+        )
+        + _ctl(
+            "Yaw · degrees",
+            "Exact source yaw around world Z.",
+            options="Any finite degrees",
+            default="0",
+            effect="Same as the quarter-turn buttons, with a precise value.",
+            gotcha="Does not change cell sequence. Animated roots use a non-animated parent so yaw sticks.",
+        )
+        + _ctl(
+            "Playback / sampling",
+            "How the source range is sampled and how preview play behaves.",
+            options="Loop (exclude end pose), One-shot (include end pose)",
+            default="Loop",
+            effect="Loop wraps and skips the final endpoint. One-shot includes both ends when there are two or more frames.",
+            gotcha="Phase is ignored on one-shot. Preview play stops on the last one-shot frame.",
+        )
+        + _ctl(
+            "Source start / Source end",
+            "Trim the detected action range. Blank means use the detected value.",
+            options="Integer frames, or empty",
+            default="Empty (detected)",
+            effect="Shortens the sampled span.",
+            gotcha="Inverted ranges are rejected. Inspect still shows the full detected range.",
+        )
+        + _ctl(
+            "First pose / phase",
+            "Shifts which pose is frame 0. Loop only.",
+            options="0 to 1",
+            default="0",
+            effect="Phase wraps inside the loop range.",
+            gotcha="Hidden (and ignored) for one-shot clips.",
+        )
+        + _ctl(
+            "Reverse playback",
+            "Sample the range backwards.",
+            options="On or off",
+            default="Off",
+            effect="Loop reverse wraps. One-shot reverse does not wrap. A single one-shot frame is the end pose if reverse is on.",
+            gotcha="This is sampling order, not an in-engine playback flag. Metadata records loop_mode separately.",
+        )
+        + _ctl(
+            "Choose replacement model",
+            "Optional second model that replaces cell 01 in each direction.",
+            options="Same formats as the main source; clear with the close icon",
+            default="No replacement model",
+            effect="Keeps the total frame count: 11 requested frames become 1 replacement + 10 samples.",
+            gotcha="No blending. Scale, origin, and orientation must match. Not an idle-sheet generator. CLI: --idle.",
+        ),
+        ("phase", "source start", "source facing", "first direction", "reverse playback",
+         "first-frame replacement"),
+    ),
+    Article(
+        "ref-export", "Export dialog controls", "reference",
+        [
+            ("p", "Export sprite sheet dialog. Rendering never writes into the source folder. Re-export reuses the composed sheet."),
+            ("note", _t(
+                "Auto-normalize: BMP forces at least 24-bit. A non-32-bit job or BMP with a ",
+                "transparent background switches to magic pink. Magic pink forces hard alpha.",
+            )),
+        ]
+        + _ctl(
+            "Output preset",
+            "Named starting points for format, depth, background, and bleed.",
+            options="PNG RGBA (modern), PNG engine atlas (dilated), TGA magic-pink (legacy 2D), BMP 8-bit indexed (DOS), or Custom",
+            default="PNG RGBA (modern)",
+            effect="Fills the other export fields. You can still edit them.",
+            gotcha="Editing a field after a preset shows Custom output.",
+        )
+        + _ctl(
+            "Format",
+            "File type written by Export.",
+            options="png, tga, bmp",
+            default="png",
+            effect="Sets the destination extension and legal depths.",
+            gotcha="The CLI supports png and tga only. BMP is GUI-only.",
+        )
+        + _ctl(
+            "Colour depth",
+            "Bits per pixel of the written file.",
+            options="32, 24, 8 (the legal set depends on format)",
+            default="32",
+            effect="32 keeps alpha. 24 and 8 need a solid or key background.",
+            gotcha="BMP cannot be 32-bit. Indexed (8) enables palette and dithering.",
+        )
+        + _ctl(
+            "Background",
+            "What sits behind transparent pixels.",
+            options="Transparent (alpha), Magic pink (colour key), Solid colour",
+            default="Transparent",
+            effect="Composites the sheet before write.",
+            gotcha="Transparent is hidden when depth is not 32 or format is BMP. Those cases switch to magic pink.",
+        )
+        + _ctl(
+            "Background colour",
+            "Fill colour when Background is Solid.",
+            options="#hex",
+            default="#000000",
+            effect="Paints opaque pixels behind the character.",
+            gotcha="Hidden unless Background is Solid.",
+        )
+        + _ctl(
+            "Alpha treatment",
+            "How semi-transparent edges are kept or cut.",
+            options="Soft (anti-aliased), Hard (1-bit cutout)",
+            default="Soft",
+            effect="Hard uses the alpha cutoff. Magic pink forces hard.",
+            gotcha="Soft edges are anti-aliasing, not dithering.",
+        )
+        + _ctl(
+            "Alpha cutoff",
+            "Threshold for hard alpha.",
+            options="1 to 255",
+            default="128",
+            effect="Pixels below the cutoff become fully transparent.",
+            gotcha="Disabled unless Alpha treatment is Hard.",
+        )
+        + _ctl(
+            "Edge bleed",
+            "Copies RGB into neighbouring transparent pixels.",
+            options="Off, 1, 2, 4, 8 pixels",
+            default="Off (PNG RGBA); engine-atlas preset uses a dilated value",
+            effect="Reduces dark fringes when the engine filters or keys the sheet.",
+            gotcha="Does not enlarge the silhouette or add cell padding. It is not dithering.",
+        )
+        + _ctl(
+            "Dithering",
+            "How 8-bit indexed colour is reduced.",
+            options="None, Ordered (Bayer), Floyd-Steinberg",
+            default="None",
+            effect="Spreads quantization error for indexed output.",
+            gotcha="Disabled unless colour depth is 8-bit.",
+        )
+        + _ctl(
+            "Palette",
+            "Where the 8-bit palette comes from.",
+            options="Adaptive (from this sheet), Load a palette file, Custom fixed colours",
+            default="Adaptive",
+            effect="Chooses the index table.",
+            gotcha="Adaptive palettes can differ between sheets. Use a shared file or fixed list for related clips.",
+        )
+        + _ctl(
+            "Maximum colours",
+            "Cap for an adaptive palette.",
+            options="2 to 256",
+            default="256",
+            effect="Fewer colours, smaller unique set.",
+            gotcha="Visible only for adaptive 8-bit. Prepending a missing key colour can truncate to 256 and shift indices.",
+        )
+        + _ctl(
+            "Load .pal / .gpl / .hex and Palette path",
+            "Supply a palette file for indexed output.",
+            options=".pal, .gpl, .hex; path field",
+            default="Empty",
+            effect="Uses that palette instead of an adaptive one.",
+            gotcha="Visible only when Palette is File. Paths in recipes are stored relative when possible.",
+        )
+        + _ctl(
+            "Fixed colours · #RRGGBB",
+            "Type a custom palette as space-separated hex colours.",
+            options="#RRGGBB tokens",
+            default="Empty",
+            effect="Exact index list for engines that require it.",
+            gotcha="Visible only when Palette is Fixed. Adding a missing key colour can shift indices.",
+        )
+        + _ctl(
+            "Write JSON sidecar",
+            "Write animation metadata next to the image.",
+            options="On or off",
+            default="Off",
+            effect="Sidecar includes layout, sample times, playback_fps, source_fps, loop mode, and pivot.",
+            gotcha="The image itself does not encode those rules. CLI: --metadata.",
+        )
+        + _ctl(
+            "Export sprite sheet (dialog)",
+            "Writes the processed sheet to a destination you pick.",
+            options="Desktop save picker, or browser download",
+            default="Suggested name is source_stem_sheet.ext",
+            effect="Re-export updates processing without starting Blender again.",
+            gotcha="Never writes into the source folder by itself. You choose the destination.",
+        ),
+        ("output preset", "edge bleed", "magic pink", "write json sidecar",
+         "dithering", "alpha cutoff"),
+    ),
+    Article(
+        "ref-dialogs", "Other dialogs", "reference",
+        [
+            ("p", "Path dialogs used in the browser preview, plus this Help window."),
+        ]
+        + _ctl(
+            "Choose model dialog (web)",
+            "Absolute path field when FRAMEMILL_WEB=1.",
+            options="Existing .fbx / .glb / .gltf / .obj path",
+            default="Empty",
+            effect="Loads that file as the main source or as a replacement model.",
+            gotcha="The desktop app uses a native picker instead.",
+        )
+        + _ctl(
+            "Recipe dialog (web)",
+            "Absolute path for Save recipe or Load recipe.",
+            options="A .json path you can write or read",
+            default="Empty",
+            effect="Same recipe format as the desktop pickers.",
+            gotcha="Load still rejects a missing source.",
+        )
+        + _ctl(
+            "Help dialog",
+            "Searchable articles: this window.",
+            options="Search field, category list, article pane, Back to workspace",
+            default="Opens on Getting started",
+            effect="Search shows ranked results (title + category) instead of the tree.",
+            gotcha="Hidden on the top bar below 1000 px width. Degrades to article-only below 900 px.",
+        ),
+        ("recipe dialog", "help dialog", "absolute path"),
+    ),
 ]
+
+
+CONTROL_KEYWORDS: tuple[str, ...] = (
+    "orbit distance", "edge bleed", "magic pink", "fit multiplier", "specular ior",
+    "phase", "anchor", "output preset", "write json sidecar", "recenter", "base size",
+    "locate blender", "choose a model", "elevation", "source start", "first direction",
+    "alpha cutoff", "viewer fps",
+)
 
 
 def _block_text(block: Block) -> str:

@@ -11,9 +11,9 @@ def test_search_empty_and_keywords():
     assert help_content.search("") == []
     assert help_content.search("   ") == []
     pink = help_content.search("magic pink")
-    assert pink and pink[0].id == "exporting"
+    assert pink and pink[0].id in {"exporting", "ref-export"}
     orbit = help_content.search("orbit distance")
-    assert orbit and orbit[0].id == "camera-framing"
+    assert orbit and orbit[0].id in {"camera-framing", "ref-appearance"}
 
 
 def test_title_ranks_above_body_only():
@@ -37,3 +37,9 @@ def test_placeholders_and_lookups():
     assert help_content.BRAND_URL == "https://unfinished-works.com"
     assert help_content.article_by_id("first-sheet").category == "getting-started"
     assert help_content.articles_in("about")[0].id == "about"
+
+
+def test_every_listed_control_is_searchable():
+    missing = [key for key in help_content.CONTROL_KEYWORDS if not help_content.search(key)]
+    assert missing == []
+    assert help_content.articles_in("reference")
