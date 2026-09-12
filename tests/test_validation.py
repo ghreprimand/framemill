@@ -29,7 +29,7 @@ def test_rejects_inverted_source_range():
 def test_from_dict_skips_invalid_types():
     s, warnings = RenderSettings.from_dict_recovering(
         {"frames": "nope", "angles": 8, "loop_mode": "oneshot"})
-    assert s.frames == 4
+    assert s.frames == 8
     assert s.loop_mode == "oneshot"
     assert any("frames" in w for w in warnings)
 
@@ -44,7 +44,7 @@ def test_from_dict_rejects_bool_and_nonfinite_in_strict_mode():
 def test_from_dict_recovering_does_not_crash_on_invalid_persist():
     s, warnings = RenderSettings.from_dict_recovering(
         {"frames": True, "angles": 99, "ortho_scale_mult": float("inf")})
-    assert s.frames == 4
+    assert s.frames == 8
     assert s.angles == 8
     assert warnings
 
@@ -75,7 +75,7 @@ def test_fixed_framing_ignores_clip_height():
 def test_feet_anchor_uses_lowest_z_not_center():
     s = RenderSettings(anchor="feet")
     assert framing_target((0, 0, 2), (1, 1, 4), s) == (0, 0, 0)
-    assert framing_target((0, 0, 2), (1, 1, 4), RenderSettings()) == (0, 0, 2)
+    assert framing_target((0, 0, 2), (1, 1, 4), RenderSettings(anchor="center")) == (0, 0, 2)
 
 
 def test_fixed_framing_uses_explicit_origin_not_clip_bounds():

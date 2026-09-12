@@ -13,18 +13,18 @@ Blender path, and asks for confirmation first.
 | Setting | Default | Notes |
 | --- | --- | --- |
 | `angles` | `8` | Directions rendered: 1, 4, 8, or 16. |
-| `frames` | `4` | Output frames per direction (1 to 64). Changes sampling density, not clip duration. |
+| `frames` | `8` | Output frames per direction (1 to 64). Changes sampling density, not clip duration. |
 | `frame_width` | `96` | Sprite cell width in pixels. |
 | `frame_height` | `128` | Sprite cell height in pixels. |
-| `render_width` | `1920` | Blender render width before downscale. |
-| `render_height` | `1080` | Blender render height before downscale. |
+| `render_width` | `1080` | Blender render width before downscale. Matches the 3:4 cell so no rendered pixels are cropped away. |
+| `render_height` | `1440` | Blender render height before downscale. |
 
 ## Direction and layout
 
 | Setting | Default | Notes |
 | --- | --- | --- |
 | `start_direction` | `S` | Which direction is the first cell. |
-| `rotation` | `cw` | `cw` or `ccw`. Clockwise from North is N, NE, E, SE, S, SW, W, NW. |
+| `rotation` | `ccw` | `cw` or `ccw`. Clockwise from North is N, NE, E, SE, S, SW, W, NW. |
 | `layout_axis` | `rows` | `rows` = directions down, frames across; `cols` = transposed. |
 
 See [Orientation](orientation.md) for the full direction model.
@@ -55,7 +55,7 @@ See [Orientation](orientation.md) for the full direction model.
 | `ortho_scale_mult` | `1.8` | Fit multiplier. Larger values make the model smaller in the cell. |
 | `framing_scale` | `2.0` | World-unit orthographic scale in fixed mode. |
 | `framing_origin_x/y/z` | `0.0` | World-unit look-at point, fixed mode only. |
-| `anchor` | `center` | `center` (bounds centre) or `feet` (lowest point). Fit mode only; fixed mode uses the origin. |
+| `anchor` | `feet` | `feet` keeps the lowest point at a consistent cell position (best when the engine places actors by their feet); `center` uses the bounds centre. Fit mode only; fixed mode uses the origin. |
 | `output_offset_x/y` | `0` | Finished-cell pixels. +X right, +Y down. |
 
 Use fixed world scale plus a shared origin and offsets so related sheets (walk, idle,

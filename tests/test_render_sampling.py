@@ -185,7 +185,7 @@ def test_remove_root_motion_calls_setup_camera_per_frame(renderer, tmp_path, mon
         return box
 
     monkeypatch.setattr(module, "mesh_bounds", fake_bounds)
-    cfg = RenderSettings(angles=1, frames=4, remove_root_motion=True,
+    cfg = RenderSettings(angles=1, frames=4, remove_root_motion=True, anchor="center",
                          anim_start_override=0, anim_end_override=10).render_config()
     module.render_all("walk.fbx", tmp_path, cfg)
     assert len(cameras) == 4

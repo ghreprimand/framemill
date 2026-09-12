@@ -151,17 +151,17 @@ def framing_target(
 class RenderSettings:
     # --- Output geometry ---
     angles: int = 8
-    frames: int = 4
+    frames: int = 8
     frame_width: int = 96
     frame_height: int = 128
 
-    # --- Supersampling ---
-    render_width: int = 1920
-    render_height: int = 1080
+    # --- Supersampling (portrait, matches the default 3:4 cell) ---
+    render_width: int = 1080
+    render_height: int = 1440
 
     # --- Layout (no universal standard; all configurable) ---
     start_direction: str = "S"      # S | N | E | W (which direction is first)
-    rotation: str = "cw"            # cw | ccw
+    rotation: str = "ccw"           # cw | ccw
     layout_axis: str = "rows"       # rows = directions down / frames across; cols = transpose
 
     # --- Animation timing ---
@@ -179,7 +179,7 @@ class RenderSettings:
     framing_origin_x: float = 0.0   # world-unit look-at; used only in fixed mode
     framing_origin_y: float = 0.0
     framing_origin_z: float = 0.0
-    anchor: str = "center"          # center | feet (fit mode); fixed mode uses origin
+    anchor: str = "feet"            # center | feet (fit mode); fixed mode uses origin
     output_offset_x: int = 0        # finished-cell pixels; +X right, +Y down
     output_offset_y: int = 0
 
