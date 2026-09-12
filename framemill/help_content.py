@@ -809,6 +809,14 @@ ARTICLES: list[Article] = [
             gotcha="The browser preview cannot pick a new executable; set it in the desktop app or on PATH.",
         )
         + _ctl(
+            "Reset to defaults",
+            "Restores render and export settings to factory defaults after a confirm dialog.",
+            options="Confirm: Cancel or Reset",
+            default="Off; current saved settings stay until you confirm",
+            effect="Applies RenderSettings() defaults and the PNG RGBA export preset, then saves them.",
+            gotcha="Keeps the loaded model and the remembered Blender path. Does not clear a completed sheet.",
+        )
+        + _ctl(
             "Help",
             "Opens this browser.",
             options="Search, category nav, Back to workspace",
@@ -824,8 +832,8 @@ ARTICLES: list[Article] = [
             effect="Shows inspect, preview, sheet, and export messages.",
             gotcha="A failed job prints the error here. Correct highlighted fields before rendering.",
         ),
-        ("choose a model", "recenter", "base size", "locate blender", "frame strip",
-         "checkerboard", "viewer fps"),
+        ("choose a model", "recenter", "base size", "locate blender", "reset to defaults",
+         "frame strip", "checkerboard", "viewer fps"),
     ),
     Article(
         "ref-source", "Source panel controls", "reference",
@@ -1337,7 +1345,7 @@ CONTROL_KEYWORDS: tuple[str, ...] = (
     "orbit distance", "edge bleed", "magic pink", "fit multiplier", "specular ior",
     "phase", "anchor", "output preset", "write json sidecar", "recenter", "base size",
     "locate blender", "choose a model", "elevation", "source start", "first direction",
-    "alpha cutoff", "viewer fps",
+    "alpha cutoff", "viewer fps", "reset to defaults",
 )
 
 

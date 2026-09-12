@@ -48,6 +48,11 @@ def preview_settings(settings: RenderSettings, facing: str = "S") -> RenderSetti
     return dataclasses.replace(settings, angles=8, start_direction=facing)
 
 
+def reset_workspace_settings() -> tuple[RenderSettings, ExportConfig]:
+    """Default render + export settings. Does not touch model or Blender path."""
+    return RenderSettings(), copy.deepcopy(EXPORT_PRESETS[DEFAULT_EXPORT].config)
+
+
 def main(page: ft.Page) -> None:
     page.title = "Framemill: Sprite workspace"
     page.theme_mode = ft.ThemeMode.DARK
@@ -86,6 +91,7 @@ def main(page: ft.Page) -> None:
     zoom = 3
     fps = 8
     resize_dialog = None
+    refresh_open_export = None
     preview_seq = 0
     pending_preview = False
     pending_sheet = False
@@ -534,9 +540,37 @@ def main(page: ft.Page) -> None:
         height_field.value = str(settings.frame_height)
         frames_field.value = str(settings.frames)
         width_field.error = height_field.error = frames_field.error = None
+        angles_dd.value = str(settings.angles)
         appearance_dd.value = appearance_key()
         build_inspector()
         update_geometry()
+
+    def apply_workspace_defaults():
+        nonlocal settings, export_cfg
+        settings, export_cfg = reset_workspace_settings()
+        sync_chrome()
+        persist()
+        if refresh_open_export is not None:
+            refresh_open_export()
+        mark_changed()
+        notify("Render and export settings reset to defaults.")
+
+    def confirm_reset(e=None):
+        def accept(ev):
+            page.pop_dialog()
+            apply_workspace_defaults()
+
+        page.show_dialog(ft.AlertDialog(
+            title=text("Reset to defaults", 20),
+            content=text(
+                "Reset all render and export settings to defaults? "
+                "Your loaded model and Blender connection stay.",
+                13, MUTED),
+            actions=[
+                button("Cancel", ft.Icons.CLOSE, lambda ev: page.pop_dialog()),
+                button("Reset", ft.Icons.RESTART_ALT, accept, True),
+            ],
+            bgcolor=PANEL))
 
     def inspect_job(executable, source, token):
         try:
@@ -1083,7 +1117,7 @@ def main(page: ft.Page) -> None:
         page.show_dialog(dialog)
 
     def open_export(e):
-        nonlocal playing, resize_dialog
+        nonlocal playing, resize_dialog, refresh_open_export
         if last_sheet is None or last_sheet_settings is None:
             return
         playing = False
@@ -1306,6 +1340,15 @@ def main(page: ft.Page) -> None:
                 dialog_body.content = ft.Column(
                     [preview_panel, settings_panel], spacing=16, expand=True,
                     horizontal_alignment=ft.CrossAxisAlignment.STRETCH)
+        def sync_draft_from_cfg():
+            nonlocal draft, selected_preset
+            draft = copy.deepcopy(export_cfg)
+            selected_preset = next((k for k, preset in EXPORT_PRESETS.items()
+                                    if preset.config == draft), "")
+            build_export_controls()
+            refresh()
+
+        refresh_open_export = sync_draft_from_cfg
         resize_dialog = fit_export_dialog
         fit_export_dialog()
         page.show_dialog(dialog)
@@ -1316,6 +1359,8 @@ def main(page: ft.Page) -> None:
     width_field = field("Width · px", settings.frame_width, lambda e: integer("frame_width", e), expand=True)
     height_field = field("Height · px", settings.frame_height, lambda e: integer("frame_height", e), expand=True)
     frames_field = field("Frames", settings.frames, lambda e: integer("frames", e), expand=True)
+    angles_dd = dropdown("Directions", settings.angles, [(n, str(n)) for n in (1, 4, 8, 16)],
+                         angles_changed, expand=True)
     appearance_dd = dropdown("Appearance preset", appearance_key(),
         [(k, v.label) for k, v in PRESETS.items()] + [("custom", "Custom appearance")], choose_preset)
     sidebar = ft.Container(width=340, bgcolor=PANEL, padding=ft.Padding(20, 20, 6, 20),
@@ -1335,8 +1380,7 @@ def main(page: ft.Page) -> None:
                 appearance_dd]),
             ft.Divider(color=BORDER, height=1),
             section("02 / Sprite geometry", [ft.Row([width_field, height_field], spacing=10),
-                ft.Row([dropdown("Directions", settings.angles, [(n, str(n)) for n in (1, 4, 8, 16)],
-                                 angles_changed, expand=True), frames_field], spacing=10), geometry]),
+                ft.Row([angles_dd, frames_field], spacing=10), geometry]),
             ft.Divider(color=BORDER, height=1), studio_panel, inspector,
           ], spacing=18, horizontal_alignment=ft.CrossAxisAlignment.STRETCH)),
         ], scroll=ft.ScrollMode.AUTO, expand=True,
@@ -1394,10 +1438,13 @@ def main(page: ft.Page) -> None:
             ft.Container(expand=True),
             guide_btn, export_btn,
         ], spacing=12))
+    reset_btn = ft.TextButton("Reset to defaults", icon=ft.Icons.RESTART_ALT, on_click=confirm_reset,
+                              style=ft.ButtonStyle(color=MUTED, text_style=ft.TextStyle(size=11)))
     footer = ft.Container(padding=ft.Padding(20, 8, 20, 8), bgcolor=PANEL,
         border=ft.Border(top=ft.BorderSide(1, BORDER)), content=ft.Row([
             ft.Container(ft.Row([ft.Icon(ft.Icons.CIRCLE, size=7, color=ACCENT if bpath else "#f1ac91"), connection], spacing=7),
                          on_click=lambda e: page.run_task(locate_blender), tooltip=bpath or "Locate Blender"),
+            reset_btn,
             ft.Container(width=12), ft.Container(status, expand=True), cancel_btn,
             text("LOCAL RENDERING", 9, FAINT),
         ], spacing=10))
