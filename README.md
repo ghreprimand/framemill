@@ -47,7 +47,12 @@ Install with [pipx](https://pipx.pypa.io) (Windows / macOS / Linux):
 ```bash
 pipx install framemill
 framemill            # launches the GUI
+framemill install-shortcut   # adds framemill to your application launcher
 ```
+
+`install-shortcut` adds a menu/launcher entry (a `.desktop` entry on Linux, an app bundle
+on macOS, a Start Menu shortcut on Windows); `uninstall-shortcut` removes it. You can also
+do it from the GUI with **Add to applications**.
 
 Update with `pipx upgrade framemill`. A Linux **AppImage** and the wheel/sdist are on the
 [releases page](https://github.com/ghreprimand/framemill/releases). Prefer to run from
