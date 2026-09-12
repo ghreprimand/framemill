@@ -168,7 +168,7 @@ def _resolve_palette(rgb: Image.Image, cfg: ExportConfig, key: RGB | None) -> li
         if not cfg.fixed_palette:
             raise ValueError("Enter at least one fixed palette colour.")
         colors = [tuple(c) for c in cfg.fixed_palette]
-    else:  # auto — adaptive palette from the image
+    else:  # auto: adaptive palette from the image
         q = rgb.quantize(colors=min(cfg.palette_colors, 256), dither=Image.Dither.NONE)
         pal = q.getpalette() or []
         colors = [tuple(pal[i:i + 3]) for i in range(0, min(len(pal), 256 * 3), 3)]

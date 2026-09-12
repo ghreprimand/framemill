@@ -69,7 +69,7 @@ def _cmd_render(a: argparse.Namespace) -> None:
     if a.metadata:
         try:
             inspected = blender.inspect(bpath, model)
-        except Exception as exc:  # noqa: BLE001 — metadata needs the live range
+        except Exception as exc:  # noqa: BLE001  metadata needs the live range
             sys.exit(f"Could not inspect source for metadata: {exc}")
 
     with tempfile.TemporaryDirectory() as tmp:

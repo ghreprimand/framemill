@@ -170,7 +170,7 @@ def animation_metadata(
 ) -> dict:
     """Neutral sidecar: layout, sample times, playback vs source timing, pivot.
 
-    Paths are names only — never absolute local source locations.
+    Paths are names only; never absolute local source locations.
     """
     start, end = resolved_anim_range(settings, source_start, source_end)
     samples = settings.sample_times(start, end) if start is not None and end is not None else []

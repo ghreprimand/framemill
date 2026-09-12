@@ -13,7 +13,7 @@ from pathlib import Path
 import flet as ft
 from PIL import Image
 
-from . import appconfig, blender, compositor, export, guide, recipe
+from . import appconfig, blender, compositor, export, help_content, recipe
 from .export import DEFAULT_EXPORT, EXPORT_PRESETS, ExportConfig
 from .preview_schedule import PREVIEW_DEBOUNCE_S, after_render_job, user_cancel
 from .settings import PRESETS, RenderSettings, direction_names, next_playback_frame
@@ -49,7 +49,7 @@ def preview_settings(settings: RenderSettings, facing: str = "S") -> RenderSetti
 
 
 def main(page: ft.Page) -> None:
-    page.title = "Framemill — Sprite workspace"
+    page.title = "Framemill: Sprite workspace"
     page.theme_mode = ft.ThemeMode.DARK
     page.theme = ft.Theme(color_scheme_seed=ACCENT, font_family="Inter", use_material3=True)
     page.bgcolor = BG
@@ -174,8 +174,8 @@ def main(page: ft.Page) -> None:
     headline = text("Your next character starts here.", 24, TEXT, ft.FontWeight.W_600)
     subtitle = text("A 3D source. Every direction. Ready for your game.", 12, MUTED)
     result_badge = text("WORKSPACE", 10, ACCENT, ft.FontWeight.W_600)
-    dimensions = text("—", 11, MUTED)
-    frame_label = text("FRAME  — / —", 10, MUTED)
+    dimensions = text("-", 11, MUTED)
+    frame_label = text("FRAME  - / -", 10, MUTED)
     direction_buttons = ft.Row(spacing=5, wrap=True, expand=True)
     timeline = ft.Row(spacing=8, scroll=ft.ScrollMode.AUTO)
     sprite_image = ft.Image(src=b"", fit=ft.BoxFit.CONTAIN, gapless_playback=True,
@@ -370,6 +370,9 @@ def main(page: ft.Page) -> None:
     inspector = ft.Column(spacing=20, horizontal_alignment=ft.CrossAxisAlignment.STRETCH)
     inspector_tab = "look"
     tab_buttons = ft.Row(spacing=4)
+    studio_panel = section("03 / Studio", [
+        ft.Container(tab_buttons, padding=3, border=border(), border_radius=9, bgcolor=BG),
+    ])
 
     def build_inspector():
         tab_buttons.controls = []
@@ -379,9 +382,13 @@ def main(page: ft.Page) -> None:
                 inspector_tab = key
                 build_inspector()
                 page.update()
-            tab_buttons.controls.append(ft.Container(text(title, 11, ACCENT if key == inspector_tab else MUTED),
-                padding=ft.Padding(12, 10, 12, 10), border_radius=6,
-                bgcolor="#2a3325" if key == inspector_tab else PANEL, on_click=select, expand=True))
+            selected = key == inspector_tab
+            tab_buttons.controls.append(ft.Container(
+                text(title, 13, ACCENT if selected else TEXT, ft.FontWeight.W_600,
+                     text_align=ft.TextAlign.CENTER),
+                padding=ft.Padding(14, 12, 14, 12), border_radius=7,
+                bgcolor="#2a3325" if selected else None, alignment=CENTER,
+                on_click=select, expand=True))
         if inspector_tab == "look":
             inspector.controls = [
                 section("Camera", [slider("Elevation · 90° is level", "camera_pitch", 30, 120, 90, "°"),
@@ -480,7 +487,7 @@ def main(page: ft.Page) -> None:
                          "One-shot includes both endpoints when there are two or more frames; "
                          "a single frame is the start pose (or the end pose if reversed). "
                          "Preview playback stops at the last one-shot frame. "
-                         "Full action/NLA clip picking remains future work — one intended action per file.", 11, MUTED)]),
+                         "Full action/NLA clip picking remains future work: one intended action per file.", 11, MUTED)]),
                 section("First-frame replacement (advanced)", [ft.Row([idle_name, ft.IconButton(ft.Icons.CLOSE, icon_size=16,
                                                                  on_click=clear_idle)]),
                     button("Choose replacement model", ft.Icons.ACCESSIBILITY_NEW, lambda e: page.run_task(pick_source, True)),
@@ -534,7 +541,7 @@ def main(page: ft.Page) -> None:
     def inspect_job(executable, source, token):
         try:
             info = blender.inspect(executable, source)
-        except Exception as exc:  # noqa: BLE001 — inspect is best-effort UI metadata
+        except Exception as exc:  # noqa: BLE001  inspect is best-effort UI metadata
             if token != inspect_token or model != source:
                 return
             detected.update(frame_start=None, frame_end=None, fps=None,
@@ -934,7 +941,7 @@ def main(page: ft.Page) -> None:
             if view_reset_pending:
                 page.run_task(reset_view)
                 view_reset_pending = False
-        except Exception as ex:  # noqa: BLE001 — report worker failures in the UI
+        except Exception as ex:  # noqa: BLE001  report worker failures in the UI
             status.value = str(ex) if cancel.is_set() else f"Render failed: {ex}"
         finally:
             action = after_render_job(
@@ -967,18 +974,113 @@ def main(page: ft.Page) -> None:
             connection.value = version
             page.update()
 
-    def open_guide(e):
-        page.show_dialog(ft.AlertDialog(title=text("From model to sprite", 22), bgcolor=PANEL,
-            content=ft.Container(width=620, height=430, content=ft.Column([
-                *[ft.Column([
-                    text(step.title, 13, ACCENT), text(step.body, 12, MUTED),
-                    *([ft.TextButton(step.action, url=step.url,
-                                    style=ft.ButtonStyle(color=ACCENT))]
-                      if step.action and step.url else []),
-                ], spacing=6) for step in guide.WORKFLOW_STEPS + guide.ANIMATION_STEPS + guide.SETUP_STEPS
-                   + guide.TROUBLESHOOTING_STEPS],
-            ], spacing=16, scroll=ft.ScrollMode.AUTO)),
-            actions=[button("Back to workspace", ft.Icons.ARROW_BACK, lambda e: page.pop_dialog())]))
+    def open_help(e=None):
+        nonlocal resize_dialog
+        selected_id = help_content.articles_in("getting-started")[0].id
+        query = ""
+        nav = ft.Column(spacing=2, scroll=ft.ScrollMode.AUTO, expand=True)
+        article_col = ft.Column(spacing=12, scroll=ft.ScrollMode.AUTO, expand=True)
+        heading = text("", 22, TEXT, ft.FontWeight.W_600)
+        blurb = text("", 12, MUTED)
+
+        def render_block(block):
+            kind = block[0]
+            if kind == "h":
+                return text(block[1], 14, ACCENT, ft.FontWeight.W_600)
+            if kind == "p":
+                return text(block[1], 13, MUTED)
+            if kind == "note":
+                return ft.Container(text(block[1], 12, TEXT), padding=12, bgcolor="#2a3325",
+                                    border=border(), border_radius=8)
+            if kind == "li":
+                return ft.Column([text(f"· {item}", 13, MUTED) for item in block[1]], spacing=4)
+            if kind == "link":
+                return ft.TextButton(block[1], url=block[2], style=ft.ButtonStyle(color=ACCENT))
+            if kind == "kbd":
+                return ft.Container(text(block[1], 12, ACCENT, font_family="monospace"),
+                                    padding=10, bgcolor=CARD, border_radius=6)
+            return text(str(block), 12, MUTED)
+
+        def paint_nav():
+            nav.controls.clear()
+            if query.strip():
+                hits = help_content.search(query)
+                if not hits:
+                    nav.controls.append(text("No matching articles.", 12, MUTED))
+                    return
+                for article in hits:
+                    cat = next(c for c in help_content.CATEGORIES if c.id == article.category)
+                    chosen = article.id == selected_id
+                    nav.controls.append(ft.Container(
+                        ft.Column([
+                            text(article.title, 12, ACCENT if chosen else TEXT, ft.FontWeight.W_600),
+                            text(cat.title, 10, MUTED),
+                        ], spacing=2),
+                        padding=10, border_radius=7,
+                        bgcolor="#2a3325" if chosen else None,
+                        on_click=lambda e, aid=article.id: show_article(aid)))
+                return
+            for cat in sorted(help_content.CATEGORIES, key=lambda c: c.order):
+                nav.controls.append(caption(cat.title))
+                for article in help_content.articles_in(cat.id):
+                    chosen = article.id == selected_id
+                    nav.controls.append(ft.Container(
+                        text(article.title, 12, ACCENT if chosen else TEXT),
+                        padding=ft.Padding(10, 8, 10, 8), border_radius=6,
+                        bgcolor="#2a3325" if chosen else None,
+                        on_click=lambda e, aid=article.id: show_article(aid)))
+
+        def show_article(article_id):
+            nonlocal selected_id
+            selected_id = article_id
+            article = help_content.article_by_id(article_id)
+            heading.value = article.title
+            cat = next(c for c in help_content.CATEGORIES if c.id == article.category)
+            blurb.value = cat.blurb
+            article_col.controls = [render_block(block) for block in article.body]
+            paint_nav()
+            page.update()
+
+        def on_search(event):
+            nonlocal query, selected_id
+            query = event.control.value or ""
+            hits = help_content.search(query)
+            if hits and selected_id not in {article.id for article in hits}:
+                show_article(hits[0].id)
+                return
+            paint_nav()
+            page.update()
+
+        search_field = field("Search help", "", on_search, hint_text="Find a control or topic")
+        nav_panel = ft.Container(width=260, padding=ft.Padding(0, 0, 12, 0), content=nav,
+                                 border=ft.Border(right=ft.BorderSide(1, BORDER)))
+        content_side = ft.Column([heading, blurb, article_col], spacing=10, expand=True)
+        body = ft.Container()
+
+        def fit_help():
+            width, height = page.width or 1440, page.height or 940
+            body.width = min(980, max(320, width - 80))
+            body.height = min(640, max(280, height - 160))
+            wide = width >= 900
+            nav_panel.visible = wide
+            nav_panel.width = 260 if wide else 0
+            body.content = ft.Row(
+                [nav_panel, content_side] if wide else [content_side],
+                spacing=16, expand=True,
+                vertical_alignment=ft.CrossAxisAlignment.STRETCH)
+
+        dialog = ft.AlertDialog(
+            bgcolor=PANEL, shape=ft.RoundedRectangleBorder(radius=16),
+            title=ft.Row([
+                text("Help", 22, TEXT, ft.FontWeight.W_600),
+                ft.Container(search_field, expand=True),
+            ], spacing=16),
+            content=body,
+            actions=[button("Back to workspace", ft.Icons.ARROW_BACK, lambda ev: page.pop_dialog())])
+        resize_dialog = fit_help
+        fit_help()
+        show_article(selected_id)
+        page.show_dialog(dialog)
 
     def open_export(e):
         nonlocal playing, resize_dialog
@@ -1169,7 +1271,7 @@ def main(page: ft.Page) -> None:
                 persist()
                 page.pop_dialog()
                 notify(message)
-            except Exception as exc:  # noqa: BLE001 — keep export errors in the dialog
+            except Exception as exc:  # noqa: BLE001  keep export errors in the dialog
                 export_error.value = f"Export failed: {exc}"
                 page.update()
 
@@ -1239,7 +1341,7 @@ def main(page: ft.Page) -> None:
             section("02 / Sprite geometry", [ft.Row([width_field, height_field], spacing=10),
                 ft.Row([dropdown("Directions", settings.angles, [(n, str(n)) for n in (1, 4, 8, 16)],
                                  angles_changed, expand=True), frames_field], spacing=10), geometry]),
-            ft.Divider(color=BORDER, height=1), tab_buttons, inspector,
+            ft.Divider(color=BORDER, height=1), studio_panel, inspector,
           ], spacing=18, horizontal_alignment=ft.CrossAxisAlignment.STRETCH)),
         ], scroll=ft.ScrollMode.AUTO, expand=True,
            horizontal_alignment=ft.CrossAxisAlignment.STRETCH))
@@ -1285,7 +1387,7 @@ def main(page: ft.Page) -> None:
         page.update()
 
     breadcrumb = ft.Row([text("/", 18, FAINT), text("Sprite workspace", 12, MUTED)], tight=True)
-    guide_btn = ft.TextButton("Quick guide", icon=ft.Icons.HELP_OUTLINE, on_click=open_guide,
+    guide_btn = ft.TextButton("Help", icon=ft.Icons.HELP_OUTLINE, on_click=open_help,
                               style=ft.ButtonStyle(color=MUTED))
     topbar = ft.Container(padding=ft.Padding(22, 14, 22, 14), bgcolor=PANEL,
         border=ft.Border(bottom=ft.BorderSide(1, BORDER)), content=ft.Row([

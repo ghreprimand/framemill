@@ -19,7 +19,7 @@ class Step:
 SETUP_STEPS: list[Step] = [
     Step(
         "Install Blender",
-        "framemill renders through Blender running in the background — you never "
+        "framemill renders through Blender running in the background. You never "
         "have to open Blender yourself. Install any recent version (4.2 or newer "
         "recommended), then return here.",
         action="Download Blender",
@@ -29,7 +29,7 @@ SETUP_STEPS: list[Step] = [
         "Point framemill at Blender",
         "framemill looks for Blender on your PATH and in the usual install "
         "locations automatically. If it can't find it, use the 'Locate Blender' "
-        "connection control at the bottom of the workspace to pick the executable once — the choice is "
+        "connection control at the bottom of the workspace to pick the executable once. The choice is "
         "remembered.",
     ),
     Step(

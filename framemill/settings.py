@@ -159,7 +159,7 @@ class RenderSettings:
     render_width: int = 1920
     render_height: int = 1080
 
-    # --- Layout (no universal standard — all configurable) ---
+    # --- Layout (no universal standard; all configurable) ---
     start_direction: str = "S"      # S | N | E | W (which direction is first)
     rotation: str = "cw"            # cw | ccw
     layout_axis: str = "rows"       # rows = directions down / frames across; cols = transpose
