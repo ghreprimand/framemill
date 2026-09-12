@@ -287,8 +287,8 @@ ARTICLES: list[Article] = [
         "sprite-geometry", "Directions, frames and cell size", "geometry",
         [
             ("p", _t(
-                "Directions are 1, 4, 8 or 16. Frame count is 1–64. Cell width and height ",
-                "are 1–1024 pixels. The readout shows finished sheet pixels, sprite count ",
+                "Directions are 1, 4, 8 or 16. Frame count is 1-64. Cell width and height ",
+                "are 1-1024 pixels. The readout shows finished sheet pixels, sprite count ",
                 "(directions × frames), and an estimated RGBA size.",
             )),
             ("p", _t(
@@ -521,7 +521,7 @@ ARTICLES: list[Article] = [
                 "-o / --output: required output path (extension set per --format).",
                 "--preset: Generic PBR / Tripo / Mixamo key.",
                 "--angles: 1, 4, 8 or 16.",
-                "--frames: positive integer 1–64; zero or negative is an error.",
+                "--frames: positive integer 1-64; zero or negative is an error.",
                 "--recipe: versioned project recipe (JSON).",
                 "--idle: advanced; replace frame 0 with a second model pose; keeps total count, no blending.",
                 "--format: comma list: png, tga (not bmp).",

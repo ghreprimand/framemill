@@ -117,7 +117,7 @@ def main(argv: list[str] | None = None) -> None:
     r.add_argument("-o", "--output", required=True, help="output path (extension set per --format)")
     r.add_argument("--preset", choices=list(PRESETS), default=DEFAULT_PRESET)
     r.add_argument("--angles", type=int, choices=[1, 4, 8, 16])
-    r.add_argument("--frames", type=int, help="output frame count (1–64)")
+    r.add_argument("--frames", type=int, help="output frame count (1-64)")
     r.add_argument("--recipe", help="versioned project recipe (JSON)")
     r.add_argument("--idle", help="advanced: replace frame 0 with a second model pose; keeps total count, no blending")
     r.add_argument("--format", default="png", help="comma list: png,tga")

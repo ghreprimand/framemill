@@ -280,7 +280,7 @@ def main(page: ft.Page) -> None:
             event.control.error = None
             change(name, value)
         except ValueError:
-            event.control.error = f"Enter 1–{maximum}"
+            event.control.error = f"Enter 1-{maximum}"
             page.update()
 
     def optional_frame(name, event):
@@ -358,7 +358,7 @@ def main(page: ft.Page) -> None:
             span = detected.get("duration_frames")
             fps_v = detected.get("fps")
             message = (
-                f"Detected: {action} · frames {detected['frame_start']}–{detected['frame_end']}"
+                f"Detected: {action} · frames {detected['frame_start']}-{detected['frame_end']}"
                 + (f" · {span}-frame span" if span is not None else "")
                 + (f" · {fps_v} fps source" if fps_v else "")
             )
@@ -1101,13 +1101,8 @@ def main(page: ft.Page) -> None:
                                     horizontal_alignment=ft.CrossAxisAlignment.STRETCH)
         dialog = None
 
-        def normalize():
-            if draft.format == "bmp" and draft.depth == 32:
-                draft.depth = 24
-            if (draft.depth != 32 or draft.format == "bmp") and draft.background == "transparent":
-                draft.background = "magic_pink"
-            if draft.background == "magic_pink":
-                draft.alpha_mode = "hard"
+        def normalize(capability_changed=False):
+            export.apply_export_capabilities(draft, capability_changed=capability_changed)
 
         def refresh():
             try:
@@ -1126,7 +1121,7 @@ def main(page: ft.Page) -> None:
             selected_preset = ""
             export_controls.controls[1].value = ""
             setattr(draft, name, value)
-            normalize()
+            normalize(capability_changed=name in {"format", "depth"})
             if rebuild:
                 build_export_controls()
             refresh()
@@ -1167,9 +1162,10 @@ def main(page: ft.Page) -> None:
             depths = [(32, "32-bit · RGBA"), (24, "24-bit · RGB"), (8, "8-bit · Indexed")]
             if draft.format == "bmp":
                 depths = depths[1:]
-            backgrounds = [("magic_pink", "Magic pink · colour key"), ("solid", "Solid colour")]
-            if draft.depth == 32 and draft.format != "bmp":
-                backgrounds.insert(0, ("transparent", "Transparent · alpha"))
+            allowed = export.valid_backgrounds(draft.format, draft.depth)
+            if draft.background not in allowed:
+                draft.background = allowed[0]
+            backgrounds = [(key, export.BACKGROUND_LABELS[key]) for key in allowed]
             export_controls.controls = [
                 caption("Target preset"),
                 dropdown("Output preset", selected_preset,
@@ -1201,7 +1197,7 @@ def main(page: ft.Page) -> None:
                 text("Bleed extends RGB into transparent pixels without enlarging the silhouette. It is not dithering.", 11, MUTED),
                 ft.Divider(color=BORDER), caption("Indexed colour"),
                 dropdown("Dithering", draft.dither,
-                         [("none", "None · clean colours"), ("ordered", "Ordered · Bayer"), ("floyd", "Floyd–Steinberg")],
+                         [("none", "None · clean colours"), ("ordered", "Ordered · Bayer"), ("floyd", "Floyd-Steinberg")],
                          lambda v: change_export("dither", v), disabled=not indexed),
                 dropdown("Palette", draft.palette_source,
                          [("auto", "Adaptive · from this sheet"), ("file", "Load a palette file"), ("fixed", "Custom fixed colours")],
