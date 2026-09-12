@@ -1,5 +1,5 @@
 """Preview orientation must not rewrite export settings."""
-from framemill.app import preview_settings
+from framemill.app import mesh_bounds_note, preview_settings
 from framemill.settings import RenderSettings
 
 
@@ -32,3 +32,11 @@ def test_preview_keeps_source_yaw_loop_mode_and_framing():
     assert view.anchor == "feet" and view.output_offset_x == 4
     assert view.remove_root_motion is True and source.remove_root_motion is True
     assert source.start_direction == "N"
+
+
+def test_mesh_bounds_note_formats_count_and_size():
+    assert mesh_bounds_note({}) == ""
+    assert mesh_bounds_note({"mesh_count": 1, "dimensions": [1.25, 0.5, 2.0]}) == (
+        " · 1 mesh - 1.25 x 0.5 x 2")
+    assert mesh_bounds_note({"mesh_count": 3, "dimensions": [2, 1, 4]}) == (
+        " · 3 meshes - 2 x 1 x 4")

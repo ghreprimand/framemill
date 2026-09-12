@@ -338,10 +338,15 @@ ARTICLES: list[Article] = [
             ("p", guide.ANIMATION_STEPS[1].body),
             ("p", _t(
                 "The workspace shows the detected action, start, end, span and source FPS ",
-                "after you load a model. Start/end fields under Layout & timing trim that range.",
+                "after you load a model, plus mesh count and world-space W x D x H. ",
+                "Start/end fields under Layout & timing trim that range.",
             )),
             ("kbd", "framemill inspect model.fbx"),
-            ("p", "inspect reports the range, action name and source FPS used before overrides."),
+            ("p", _t(
+                "inspect reports the range, action name, source FPS, mesh count and dimensions. ",
+                "Many meshes or an unexpectedly large box usually means stray geometry is ",
+                "enlarging the fit frame.",
+            )),
         ],
         ("frame_start", "source fps", "inspect"),
     ),
@@ -409,6 +414,13 @@ ARTICLES: list[Article] = [
                 "across clips; required for matching walk/idle/attack sheets.",
             )),
             ("p", "Fit multiplier and fixed world scale: larger values make the model smaller."),
+            ("h", "Fit basis"),
+            ("p", _t(
+                "Visible only in Fit mode. Height (default) scales to character height so ",
+                "related poses stay a consistent size; very wide poses may crop at the sides. ",
+                "Width scales to the wider of X and Y. Fit whole character (contain) uses the ",
+                "larger of height and width so nothing crops, but a wide clip renders a bit smaller.",
+            )),
             ("h", "Anchor and offsets"),
             ("p", _t(
                 "Fit mode can anchor to bounds centre or feet / lowest point. Fixed mode ",
@@ -421,7 +433,7 @@ ARTICLES: list[Article] = [
                 "Use Framing or Fixed world scale to change how large the character is.",
             )),
         ],
-        ("orbit distance", "fit multiplier", "fixed world scale", "output offset"),
+        ("orbit distance", "fit multiplier", "fixed world scale", "output offset", "fit basis"),
     ),
     Article(
         "light-environment", "Light and environment", "appearance",
@@ -944,11 +956,11 @@ ARTICLES: list[Article] = [
         )
         + _ctl(
             "Detected clip line",
-            "Action name, start, end, span, and source FPS after inspect.",
+            "Action name, start, end, span, source FPS, mesh count, and W x D x H after inspect.",
             options="Read-only; updated after load",
             default="Load a model to read its animation range.",
-            effect="Tells you what range Source start/end will trim.",
-            gotcha="Uses the first active action on an imported object, or the scene range. No NLA picker.",
+            effect="Tells you what range Source start/end will trim, and whether extra meshes inflate the fit box.",
+            gotcha="Uses the first active action on an imported object, or the scene range. No NLA picker. Unexpected dimensions usually mean stray geometry.",
         )
         + _ctl(
             "Load recipe",
@@ -1051,6 +1063,14 @@ ARTICLES: list[Article] = [
             default="1.8×",
             effect="Larger values make the model smaller in the cell.",
             gotcha="Hidden in Fixed mode. Viewer zoom does not change this.",
+        )
+        + _ctl(
+            "Fit basis",
+            "Which character extent Fit mode uses for the orthographic scale.",
+            options="Height, Width, Fit whole character",
+            default="Height",
+            effect="Height matches current output. Width fits the wider of X and Y. Fit whole uses the larger of those so sides are not cropped.",
+            gotcha="Visible only in Fit mode. A wide clip on Fit whole renders a bit smaller. Fixed mode ignores this.",
         )
         + _ctl(
             "Fixed world scale",
@@ -1449,7 +1469,7 @@ CONTROL_KEYWORDS: tuple[str, ...] = (
     "locate blender", "choose a model", "elevation", "source start", "first direction",
     "alpha cutoff", "viewer fps", "reset to defaults", "master palette",
     "remove root motion", "custom colours", "fixed colours",
-    "master palette file", "create palette",
+    "master palette file", "create palette", "fit basis",
 )
 
 

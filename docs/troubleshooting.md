@@ -13,9 +13,13 @@
   plus output offsets (+X right, +Y down in the cell) rather than Fit-this-clip.
 - **Weapons, feet, or wide poses are clipped:** increase Camera → Fit multiplier or Fixed
   world scale and render again; larger values make the model smaller. Check all directions
-  and extreme poses. Fit mode uses model height and the compositor crops to the sprite
-  aspect ratio; it is not guaranteed to fit every silhouette. Viewer pan and zoom do not
-  change the exported crop.
+  and extreme poses. Fit mode defaults to character height (Fit basis); switch to Fit whole
+  character if a wide pose crops at the sides. Viewer pan and zoom do not change the
+  exported crop.
+- **Character looks tiny or the fit box is huge:** the Source line shows mesh count and
+  world-space W x D x H after inspect. Many meshes or unexpected dimensions usually mean
+  stray geometry (a ground plane, oversized effect mesh) is enlarging the frame. Remove or
+  hide that geometry in the source; framemill does not auto-exclude meshes.
 - **Camera controls:** 90 degrees is level; smaller values look down from above. Framing
   sets orthographic scale. Orbit distance is not a zoom control and also affects light
   placement; use Framing to change sprite size.

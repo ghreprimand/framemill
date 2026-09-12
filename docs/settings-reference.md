@@ -52,6 +52,7 @@ See [Orientation](orientation.md) for the full direction model.
 | Setting | Default | Notes |
 | --- | --- | --- |
 | `framing_mode` | `fit` | `fit` sizes each clip from its own bounds; `fixed` uses a world-unit scale and origin. |
+| `fit_basis` | `height` | Fit mode only. `height` (default) scales to character height; `width` scales to the wider of X and Y; `contain` uses the larger of those so a wide pose is not cropped. |
 | `ortho_scale_mult` | `1.8` | Fit multiplier. Larger values make the model smaller in the cell. |
 | `framing_scale` | `2.0` | World-unit orthographic scale in fixed mode. |
 | `framing_origin_x/y/z` | `0.0` | World-unit look-at point, fixed mode only. |

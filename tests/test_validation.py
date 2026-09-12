@@ -67,9 +67,9 @@ def test_individual_limits_are_not_enough_without_aggregate_cap():
 
 def test_fixed_framing_ignores_clip_height():
     s = RenderSettings(framing_mode="fixed", framing_scale=3.5, ortho_scale_mult=1.8)
-    assert framing_ortho_scale(s, 10) == 3.5
+    assert framing_ortho_scale(s, (1, 1, 10)) == 3.5
     fit = RenderSettings(framing_mode="fit", ortho_scale_mult=2)
-    assert framing_ortho_scale(fit, 4) == 8
+    assert framing_ortho_scale(fit, (1, 1, 4)) == 8
 
 
 def test_feet_anchor_frames_full_body_with_feet_low():
@@ -78,7 +78,7 @@ def test_feet_anchor_frames_full_body_with_feet_low():
     from framemill.settings import framing_ortho_scale
     s = RenderSettings(anchor="feet")
     center, size = (0, 0, 2), (1, 1, 4)
-    scale = framing_ortho_scale(s, size[2])
+    scale = framing_ortho_scale(s, size)
     aim = framing_target(center, size, s)
     feet_z = center[2] - size[2] / 2.0
     head_z = center[2] + size[2] / 2.0

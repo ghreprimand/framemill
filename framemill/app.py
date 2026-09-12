@@ -53,6 +53,27 @@ def reset_workspace_settings() -> tuple[RenderSettings, ExportConfig]:
     return RenderSettings(), copy.deepcopy(EXPORT_PRESETS[DEFAULT_EXPORT].config)
 
 
+def mesh_bounds_note(info: dict) -> str:
+    """Short inspect suffix: ' · N meshes - W x D x H'."""
+    count = info.get("mesh_count")
+    dims = info.get("dimensions")
+    parts: list[str] = []
+    if isinstance(count, int):
+        parts.append("1 mesh" if count == 1 else f"{count} meshes")
+    if isinstance(dims, (list, tuple)) and len(dims) >= 3:
+        try:
+            width, depth, height = (float(dims[0]), float(dims[1]), float(dims[2]))
+        except (TypeError, ValueError):
+            width = None
+        else:
+            parts.append(f"{width:g} x {depth:g} x {height:g}")
+    if not parts:
+        return ""
+    if len(parts) == 2:
+        return f" · {parts[0]} - {parts[1]}"
+    return f" · {parts[0]}"
+
+
 def main(page: ft.Page) -> None:
     page.title = "Framemill: Sprite workspace"
     page.theme_mode = ft.ThemeMode.DARK
@@ -107,10 +128,11 @@ def main(page: ft.Page) -> None:
         "look", "exposure", "gamma", "specular_ior", "source_yaw", "loop_mode",
         "phase_offset", "reverse", "anim_start_override", "anim_end_override",
         "frames", "frame_width", "frame_height", "samples", "engine",
-        "remove_root_motion",
+        "remove_root_motion", "fit_basis",
     }
     detected = {"frame_start": None, "frame_end": None, "fps": None,
-                "action": None, "duration_frames": None}
+                "action": None, "duration_frames": None,
+                "dimensions": None, "mesh_count": None}
     result_detected: dict = {}
     inspect_token = 0
     cancel = threading.Event()
@@ -368,6 +390,7 @@ def main(page: ft.Page) -> None:
                 f"Detected: {action} · frames {detected['frame_start']}-{detected['frame_end']}"
                 + (f" · {span}-frame span" if span is not None else "")
                 + (f" · {fps_v} fps source" if fps_v else "")
+                + mesh_bounds_note(detected)
             )
         source_clip.value = message
         source_clip_motion.value = message
@@ -403,6 +426,16 @@ def main(page: ft.Page) -> None:
                                             [("fit", "Fit this clip"), ("fixed", "Fixed world scale")],
                                             framing_mode_changed),
                                    ft.Container(slider("Fit multiplier", "ortho_scale_mult", .5, 4, 70, "×"),
+                                                visible=settings.framing_mode == "fit"),
+                                   ft.Container(ft.Column([
+                                       dropdown("Fit basis", settings.fit_basis,
+                                                [("height", "Height"), ("width", "Width"),
+                                                 ("contain", "Fit whole character")],
+                                                lambda v: change("fit_basis", v)),
+                                       text("Height keeps a consistent size and may crop very wide poses. "
+                                            "Fit whole never crops but a wide clip renders a bit smaller.",
+                                            11, MUTED),
+                                   ], spacing=6, horizontal_alignment=ft.CrossAxisAlignment.STRETCH),
                                                 visible=settings.framing_mode == "fit"),
                                    ft.Column([
                                    field("Fixed world scale", settings.framing_scale,
@@ -586,14 +619,16 @@ def main(page: ft.Page) -> None:
             if token != inspect_token or model != source:
                 return
             detected.update(frame_start=None, frame_end=None, fps=None,
-                            action=None, duration_frames=None)
+                            action=None, duration_frames=None,
+                            dimensions=None, mesh_count=None)
             source_clip.value = source_clip_motion.value = f"Could not inspect animation: {exc}"
             page.update()
             return
         if token != inspect_token or model != source:
             return
         detected.update({key: info.get(key) for key in
-                         ("frame_start", "frame_end", "fps", "action", "duration_frames")})
+                         ("frame_start", "frame_end", "fps", "action", "duration_frames",
+                          "dimensions", "mesh_count")})
         if result_source == source:
             result_detected.update(detected)
         update_source_clip()

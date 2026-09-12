@@ -125,7 +125,7 @@ def main(argv: list[str] | None = None) -> None:
     r.add_argument("--metadata", action="store_true", help="write a JSON sidecar next to each image")
     r.set_defaults(func=_cmd_render)
 
-    i = sub.add_parser("inspect", help="print animation frame range + fps")
+    i = sub.add_parser("inspect", help="print animation range, fps, mesh count and dimensions")
     i.add_argument("model")
     i.set_defaults(func=_cmd_inspect)
 

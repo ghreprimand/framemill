@@ -195,6 +195,39 @@ def test_remove_root_motion_calls_setup_camera_per_frame(renderer, tmp_path, mon
     assert cameras[0][0][2] == 1.0
 
 
+def test_camera_ortho_scale_matches_host_fit_basis(renderer):
+    from framemill.settings import framing_ortho_scale
+
+    module, _ = renderer
+    size = (6.0, 2.0, 2.0)
+    for basis in ("height", "width", "contain"):
+        cfg = RenderSettings(fit_basis=basis, ortho_scale_mult=2).render_config()
+        assert module.camera_ortho_scale(size, cfg) == pytest.approx(
+            framing_ortho_scale(RenderSettings(fit_basis=basis, ortho_scale_mult=2), size))
+
+
+def test_inspect_includes_dimensions_and_mesh_count(renderer, monkeypatch):
+    import json
+
+    module, _ = renderer
+    logs = []
+    monkeypatch.setattr(module, "clear_scene", lambda: None)
+    monkeypatch.setattr(module, "import_model", lambda path: [
+        SimpleNamespace(type="MESH"), SimpleNamespace(type="MESH"),
+        SimpleNamespace(type="ARMATURE"),
+    ])
+    monkeypatch.setattr(module, "mesh_bounds", lambda objs: ((0.0, 0.0, 0.0), (1.25, 0.5, 2.0)))
+    monkeypatch.setattr(module, "first_action_name", lambda objs: "Walk")
+    monkeypatch.setattr(module, "log", logs.append)
+    module.bpy.context.scene.render.fps = 30
+    module.do_inspect("walk.fbx")
+    payload = json.loads(logs[-1].split("INSPECT ", 1)[1])
+    assert payload["action"] == "Walk"
+    assert payload["dimensions"] == [1.25, 0.5, 2.0]
+    assert payload["mesh_count"] == 2
+    assert "frame_start" in payload and "duration_frames" in payload
+
+
 def test_root_motion_off_sets_camera_once_per_direction(renderer, tmp_path, monkeypatch):
     module, _ = renderer
     cameras = []

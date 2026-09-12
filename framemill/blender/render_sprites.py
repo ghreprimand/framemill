@@ -164,7 +164,20 @@ def camera_ortho_scale(size, cfg):
         scale = float(cfg.get("framing_scale") or 0.0)
         if scale > 0:
             return scale
-    return max(size[2], 1e-3) * cfg.get("ortho_scale_mult", 1.8)
+    fw = float(cfg.get("frame_width") or 96)
+    fh = float(cfg.get("frame_height") or 128)
+    aspect = fw / max(fh, 1e-9)
+    horiz = max(float(size[0]), float(size[1]))
+    height = max(float(size[2]), 1e-3)
+    width = max(horiz / aspect, 1e-3)
+    basis = cfg.get("fit_basis") or "height"
+    if basis == "width":
+        extent = width
+    elif basis == "contain":
+        extent = max(height, width)
+    else:
+        extent = height
+    return extent * cfg.get("ortho_scale_mult", 1.8)
 
 
 def camera_target(center, size, cfg):
@@ -433,11 +446,17 @@ def do_inspect(model):
     clear_scene()
     objs = import_model(model)
     start, end = anim_range(objs)
+    lo, hi = mesh_bounds(objs)
+    size = (hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2])
+    mesh_count = sum(1 for obj in objs if getattr(obj, "type", None) == "MESH")
     log("FRAMEMILL: INSPECT " + json.dumps(
         {"frame_start": int(start), "frame_end": int(end),
          "fps": int(bpy.context.scene.render.fps),
          "action": first_action_name(objs),
-         "duration_frames": int(end) - int(start)}))
+         "duration_frames": int(end) - int(start),
+         "dimensions": [round(float(size[0]), 4), round(float(size[1]), 4),
+                        round(float(size[2]), 4)],
+         "mesh_count": int(mesh_count)}))
 
 
 def main():

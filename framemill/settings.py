@@ -22,6 +22,7 @@ _RINGS = {
 VALID_ANGLES = (1, 4, 8, 16)
 VALID_LOOP_MODES = ("loop", "oneshot")
 VALID_FRAMING_MODES = ("fit", "fixed")
+VALID_FIT_BASES = ("height", "width", "contain")
 VALID_ANCHORS = ("center", "feet")
 MAX_FRAMES = 64
 MAX_CELL = 1024
@@ -123,11 +124,33 @@ def resolved_anim_range(
     return start, end
 
 
-def framing_ortho_scale(settings: RenderSettings, height: float) -> float:
-    """World-unit orthographic scale. Fixed mode ignores per-clip height."""
+def fit_ortho_extent(
+    size: tuple[float, float, float],
+    basis: str,
+    cell_aspect: float,
+) -> float:
+    """Vertical ortho extent that Fit mode maps to the portrait cell.
+
+    Ortho scale is the visible vertical extent V. Horizontal visible extent is
+    V * cell_aspect, so fitting width needs V >= horiz / cell_aspect.
+    """
+    horiz = max(float(size[0]), float(size[1]))
+    aspect = max(float(cell_aspect), 1e-9)
+    height = max(float(size[2]), 1e-3)
+    width = max(horiz / aspect, 1e-3)
+    if basis == "width":
+        return width
+    if basis == "contain":
+        return max(height, width)
+    return height
+
+
+def framing_ortho_scale(settings: RenderSettings, size: tuple[float, float, float]) -> float:
+    """World-unit orthographic scale. Fixed mode ignores per-clip size."""
     if settings.framing_mode == "fixed" and settings.framing_scale > 0:
         return float(settings.framing_scale)
-    return max(float(height), 1e-3) * float(settings.ortho_scale_mult)
+    aspect = float(settings.frame_width) / max(float(settings.frame_height), 1e-9)
+    return fit_ortho_extent(size, settings.fit_basis, aspect) * float(settings.ortho_scale_mult)
 
 
 def framing_target(
@@ -147,7 +170,7 @@ def framing_target(
     if settings.anchor == "feet":
         # Sit the feet near the bottom of the framed area with the full body
         # above, rather than centring the window on the feet.
-        scale = framing_ortho_scale(settings, size[2])
+        scale = framing_ortho_scale(settings, size)
         feet_z = center[2] - size[2] / 2.0
         return (center[0], center[1], feet_z + scale / 2.0 - scale * FEET_GROUND_MARGIN)
     return (center[0], center[1], center[2])
@@ -181,6 +204,7 @@ class RenderSettings:
 
     # --- Shared framing (locked scale / anchor for related clips) ---
     framing_mode: str = "fit"       # fit | fixed
+    fit_basis: str = "height"       # height | width | contain; fit mode only
     framing_scale: float = 2.0      # world-unit ortho scale when framing_mode is fixed
     framing_origin_x: float = 0.0   # world-unit look-at; used only in fixed mode
     framing_origin_y: float = 0.0
@@ -336,6 +360,8 @@ class RenderSettings:
             problems.append("Loop mode must be 'loop' or 'oneshot'.")
         if self.framing_mode not in VALID_FRAMING_MODES:
             problems.append("Framing mode must be 'fit' or 'fixed'.")
+        if self.fit_basis not in VALID_FIT_BASES:
+            problems.append("Fit basis must be 'height', 'width' or 'contain'.")
         if self.anchor not in VALID_ANCHORS:
             problems.append("Anchor must be 'center' or 'feet'.")
         if self.layout_axis not in ("rows", "cols"):
