@@ -43,3 +43,10 @@ def test_every_listed_control_is_searchable():
     missing = [key for key in help_content.CONTROL_KEYWORDS if not help_content.search(key)]
     assert missing == []
     assert help_content.articles_in("reference")
+
+
+def test_workflow_pipeline_terms_are_searchable():
+    missing = [key for key in help_content.WORKFLOW_KEYWORDS if not help_content.search(key)]
+    assert missing == []
+    assert help_content.article_by_id("rig-mixamo").category == "getting-started"
+    assert help_content.article_by_id("make-a-model").category == "getting-started"

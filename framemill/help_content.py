@@ -57,7 +57,7 @@ def _step_blocks(step: guide.Step) -> list[Block]:
 
 CATEGORIES: list[Category] = [
     Category("getting-started", "Getting started", 1,
-             "Install Blender, connect it, and render your first sheet."),
+             "Install Blender, then the path from T-pose art through Tripo and Mixamo to a sheet."),
     Category("workspace", "The workspace tour", 2,
              "Sidebar, viewer, preview vs sheet, and playback."),
     Category("source", "Source & recipes", 3,
@@ -116,8 +116,66 @@ ARTICLES: list[Article] = [
                 "Walking is one use case; idle breathing, running, talking, and other ",
                 "imported animations use the same pipeline.",
             )),
+            ("p", "The whole path:"),
+            ("kbd", "concept / T-pose art  ->  3D model (Tripo)  ->  rig + animate (Mixamo)  ->  framemill  ->  your engine"),
+            ("p", _t(
+                "You need a rigged, animated 3D model with its mesh. If you already have one, ",
+                "skip to Your first sheet. If you start from a drawing or an idea, ",
+                "the next two articles get you there.",
+            )),
         ],
-        ("tripo", "mixamo", "pipeline"),
+        ("tripo", "mixamo", "pipeline", "t-pose", "a-pose"),
+    ),
+    Article(
+        "make-a-model", "Make a 3D model (Tripo)", "getting-started",
+        [
+            ("p", _t(
+                "Tripo turns a text prompt or an image into a textured 3D model. ",
+                "You can substitute Blender, a purchased model, or a scan. ",
+                "The requirement is a humanoid mesh you can rig.",
+            )),
+            ("li", [
+                "Aim for a character in a T-pose or A-pose (arms out, standing straight, facing forward). Auto-riggers need a clean neutral pose.",
+                "Keep it a single connected humanoid mesh where possible.",
+                "Export as FBX or GLB. Both carry the mesh and textures, which the next steps need.",
+            ]),
+            ("link", "Open Tripo", "https://www.tripo3d.ai/"),
+        ],
+        ("tripo", "t-pose", "a-pose", "glb"),
+    ),
+    Article(
+        "rig-mixamo", "Rig and animate (Mixamo)", "getting-started",
+        [
+            ("p", _t(
+                "Mixamo (free with an Adobe account) auto-rigs a humanoid and applies ",
+                "ready-made animations.",
+            )),
+            ("h", "Upload your model"),
+            ("li", [
+                "Mixamo accepts FBX, OBJ, or a ZIP (use ZIP for OBJ plus its .mtl and textures). An FBX or GLB with embedded textures is easiest.",
+                "Place the auto-rig markers (chin, wrists, elbows, knees, groin) on the T-pose or A-pose.",
+            ]),
+            ("h", "Pick an animation"),
+            ("li", [
+                "Choose a motion, for example Walking, Idle, or an attack.",
+                "For anything the game moves across the ground, turn In Place on. framemill does not remove root motion, so an in-place cycle keeps the character centered in every frame.",
+            ]),
+            ("h", "Download with the settings framemill needs"),
+            ("li", [
+                "Format: FBX Binary (.fbx).",
+                "Skin: With Skin. This is the important one. Without Skin exports only the skeleton, and framemill has no mesh to render.",
+                "Frames per Second: 30 or 60 is fine. framemill re-samples to the frame count you choose.",
+                "Keyframe Reduction: None, so the motion stays faithful to what you previewed.",
+            ]),
+            ("p", _t(
+                "For a static, non-animated sheet, download the character with the T-Pose animation, ",
+                "still With Skin, then choose 1 frame per direction in framemill. ",
+                "Download each animation you want as its own file (walk.fbx, idle.fbx, attack.fbx).",
+            )),
+            ("link", "Mixamo rigging and animation guide",
+             "https://helpx.adobe.com/creative-cloud/help/mixamo-rigging-animation.html"),
+        ],
+        ("mixamo", "with skin", "in place", "fbx binary", "keyframe reduction", "t-pose"),
     ),
     Article(
         "first-sheet", "Your first sheet", "getting-started",
@@ -132,13 +190,44 @@ ARTICLES: list[Article] = [
                 "write into your source folder.",
             )),
             ("li", [
-                "Load an FBX, GLB, glTF or OBJ.",
-                "Check the automatic South preview.",
-                "Set directions and frame count.",
-                "Render sheet, then Export sprite sheet.",
+                "Load the downloaded FBX (or GLB, glTF, OBJ) as the main source.",
+                "framemill reads the first action's range and shows the detected action, start, end, span, and source FPS. Trim with Source start / Source end if needed.",
+                "Set Directions (1 / 4 / 8 / 16) and Frames per direction.",
+                "Choose Loop for cycles (walk, idle) or One-shot for attacks and deaths.",
+                "If the character faces the wrong way, use Layout & timing, Source facing (South is the front camera).",
+                "Preview, then Render sheet, then Export sprite sheet.",
             ]),
         ],
-        ("first render", "south preview"),
+        ("first render", "south preview", "loop", "one-shot", "source facing"),
+    ),
+    Article(
+        "aligned-sheets", "Keep related sheets aligned", "getting-started",
+        [
+            ("p", _t(
+                "Export each animation separately (hero_walk.png, hero_idle.png, and so on). ",
+                "So they line up in your engine, use the same framing for all of them.",
+            )),
+            ("li", [
+                "Switch Camera, Framing mode to Fixed world scale.",
+                "Set the same world-unit origin (usually the character root at 0, 0, 0) and the same output offsets for every sheet.",
+            ]),
+            ("p", _t(
+                "Fit mode sizes each clip to its own bounds and will shift between clips whose poses differ.",
+            )),
+        ],
+        ("fixed world scale", "origin", "related sheets"),
+    ),
+    Article(
+        "formats-end-to-end", "File formats, end to end", "getting-started",
+        [
+            ("p", "What each stage takes in and writes out:"),
+            ("li", [
+                "Tripo: text or image in; FBX / GLB (textured) out.",
+                "Mixamo: FBX / OBJ / ZIP (T-pose) in; FBX Binary, With Skin, In Place, no keyframe reduction out.",
+                "framemill: FBX / glTF / GLB / OBJ in; PNG / TGA / BMP sprite sheet out, plus an optional JSON sidecar.",
+            ]),
+        ],
+        ("with skin", "in place", "t-pose", "fbx binary"),
     ),
     Article(
         "sidebar-areas", "Sidebar areas", "workspace",
@@ -459,7 +548,10 @@ ARTICLES: list[Article] = [
             )),
             ("p", _t(
                 "Backgrounds: transparent (alpha), solid colour, or magic pink colour-key. ",
-                "Soft edges are anti-aliasing; dithering is for reduced-colour output.",
+                "32-bit PNG offers transparent or solid only. 32-bit TGA also offers magic pink. ",
+                "24-bit, 8-bit, and BMP offer magic pink or solid. Switching format or depth ",
+                "resets an invalid leftover background. Soft edges are anti-aliasing; dithering ",
+                "is for reduced-colour output.",
             )),
             ("h", "Edge bleed and palettes"),
             ("p", _t(
@@ -1075,7 +1167,8 @@ ARTICLES: list[Article] = [
             ("p", "Export sprite sheet dialog. Rendering never writes into the source folder. Re-export reuses the composed sheet."),
             ("note", _t(
                 "Auto-normalize: BMP forces at least 24-bit. A non-32-bit job or BMP with a ",
-                "transparent background switches to magic pink. Magic pink forces hard alpha.",
+                "transparent background switches to magic pink. Switching to 32-bit PNG resets ",
+                "magic pink to transparent. Magic pink forces hard alpha.",
             )),
         ]
         + _ctl(
@@ -1233,6 +1326,11 @@ ARTICLES: list[Article] = [
         ("recipe dialog", "help dialog", "absolute path"),
     ),
 ]
+
+
+WORKFLOW_KEYWORDS: tuple[str, ...] = (
+    "mixamo", "tripo", "with skin", "in place", "t-pose",
+)
 
 
 CONTROL_KEYWORDS: tuple[str, ...] = (
