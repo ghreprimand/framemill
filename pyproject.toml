@@ -15,7 +15,7 @@ classifiers = [
   "Development Status :: 3 - Alpha",
   "Environment :: X11 Applications",
   "Intended Audience :: Developers",
-  "License :: OSI Approved :: MIT License",
+  "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
   "Programming Language :: Python :: 3",
   "Topic :: Multimedia :: Graphics",
   "Topic :: Games/Entertainment",
@@ -30,9 +30,9 @@ dependencies = [
 dev = ["pytest>=8", "ruff>=0.5"]
 
 [project.urls]
-Homepage = "https://github.com/framemill/framemill"
-Repository = "https://github.com/framemill/framemill"
-Issues = "https://github.com/framemill/framemill/issues"
+Homepage = "https://github.com/ghreprimand/framemill"
+Repository = "https://github.com/ghreprimand/framemill"
+Issues = "https://github.com/ghreprimand/framemill/issues"
 
 [project.scripts]
 framemill = "framemill.cli:main"

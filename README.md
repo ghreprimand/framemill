@@ -1,6 +1,6 @@
 # framemill
 
-Turn a rigged, animated **3D model into a directional 2D sprite sheet** — driven
+Turn a rigged, animated **3D model into a directional 2D sprite sheet**, driven
 by Blender in the background, wrapped in a small desktop app. **No Blender
 knowledge required.**
 
@@ -13,14 +13,14 @@ built for the "I have a Mixamo/Tripo model and want 8-direction sprites" workflo
 ## Why
 
 Most 3D→sprite tools are Blender add-ons: you install them *inside* Blender and
-learn its UI. framemill is the opposite — a standalone GUI that runs Blender
+learn its UI. framemill is the opposite: a standalone GUI that runs Blender
 headless for you. The fiddly parts (consistent camera framing across an
 animation, high-quality Lanczos downscaling, sprite-sheet layout, legacy-engine
 TGA output) are handled automatically.
 
 ## Features
 
-- Standalone desktop app (Windows / macOS / Linux) — Blender runs in the background.
+- Standalone desktop app (Windows / macOS / Linux). Blender runs in the background.
 - Import **FBX, glTF/GLB, OBJ**.
 - 1 / 4 / 8 / 16 directions; configurable frame count and sprite dimensions.
 - Automatic source preview, sprite/sheet views, direction switching, and animation playback.
@@ -43,14 +43,14 @@ TGA output) are handled automatically.
 ## Requirements
 
 - **Blender 4.2+** installed (framemill auto-detects it; you can also point it at
-  the executable once). Blender is *not* bundled — install it separately from
+  the executable once). Blender is *not* bundled; install it separately from
   [blender.org](https://www.blender.org/download/).
 - For running from source: Python 3.10+.
 
 ## Install / run from source
 
 ```bash
-git clone https://github.com/framemill/framemill
+git clone https://github.com/ghreprimand/framemill
 cd framemill
 python -m venv .venv
 # Activate: source .venv/bin/activate (Windows: .venv\Scripts\activate)
@@ -238,7 +238,7 @@ The script does not download or execute packaging tools automatically.
 CI uploads the Linux bundle if that tool is unavailable. The workflow in
 `.github/workflows/build.yml` defines builds for all three platforms. Packaging
 is still a development scaffold. This checkout has not validated clean installs
-or launches on Windows, macOS, or a clean Linux machine — do that before
+or launches on Windows, macOS, or a clean Linux machine. Do that before
 distributing binaries.
 
 ## How it works
@@ -254,4 +254,12 @@ model.fbx ──> Blender (headless, render_sprites.py) ──> per-angle PNG fr
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+framemill is free software licensed **GPL-3.0-only**. See [LICENSE](LICENSE).
+
+Copyright (C) 2026 Unfinished Works. You are free to use, study, share, and modify
+it. If you distribute it or a modified version, you must pass on those same freedoms
+under the GPL and make your source available; the GPL does not permit incorporating
+framemill into proprietary, closed-source software. (You can still charge for it;
+"free" here means freedom, not price.)
+
+framemill is part of **[Unfinished Works](https://unfinished-works.com)**.
