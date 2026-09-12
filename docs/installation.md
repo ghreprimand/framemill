@@ -30,8 +30,24 @@ the `framemill` command on your PATH. It needs **Python 3.10+**.
 Install pipx if you do not have it:
 
 - **Windows:** `py -m pip install --user pipx` then `py -m pipx ensurepath`
-- **macOS:** `brew install pipx` then `pipx ensurepath` (or `python3 -m pip install --user pipx`)
-- **Linux:** `sudo apt install pipx` (or `python3 -m pip install --user pipx`) then `pipx ensurepath`
+- **macOS:** `brew install pipx` then `pipx ensurepath` (no Homebrew: `python3 -m pip install --user pipx` then `python3 -m pipx ensurepath`)
+- **Linux:** install from your package manager, then `pipx ensurepath`:
+  - Debian / Ubuntu: `sudo apt install pipx`
+  - Fedora: `sudo dnf install pipx`
+  - Arch: `sudo pacman -S python-pipx`
+  - openSUSE: `sudo zypper install python3-pipx`
+  - Any distro (no package): `python3 -m pip install --user pipx` then `python3 -m pipx ensurepath`
+
+After `pipx ensurepath`, open a new terminal so the updated PATH takes effect.
+
+If you cannot or would rather not install pipx, a plain virtual environment works on any
+system:
+
+```bash
+python3 -m venv ~/.local/framemill-venv
+~/.local/framemill-venv/bin/pip install framemill
+~/.local/framemill-venv/bin/framemill
+```
 
 Then install framemill:
 
@@ -125,9 +141,9 @@ Every release also attaches the **wheel** and **sdist** to the
 [releases page](https://github.com/ghreprimand/framemill/releases). To pin a version:
 
 ```bash
-pipx install framemill==0.1.3
+pipx install framemill==0.1.8
 # or install a downloaded wheel directly:
-pipx install ./framemill-0.1.3-py3-none-any.whl
+pipx install ./framemill-0.1.8-py3-none-any.whl
 ```
 
 ---
