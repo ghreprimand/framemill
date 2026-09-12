@@ -70,13 +70,22 @@ See the [CLI reference](cli.md) for all commands and flags.
 
 ## Option 2: Packaged binaries
 
-Prebuilt desktop bundles are produced per platform with
-[`flet build`](https://flet.dev) (see `.github/workflows/build.yml`); Linux bundles are
-additionally wrapped into a portable **AppImage**.
+Each tagged release attaches the from-source **wheel and sdist** (the primary artifacts),
+and, when the build succeeds, best-effort desktop bundles produced per platform with
+[`flet build`](https://flet.dev) (see `.github/workflows/release.yml`); Linux bundles can
+additionally be wrapped into a portable **AppImage**. Grab them from the
+[releases page](https://github.com/ghreprimand/framemill/releases).
 
-> **These binaries are unsigned and pre-release.** They are a convenience, not the
-> primary distribution channel. If anything looks off, prefer
-> [installing from source](#option-1-from-source-recommended). You still need
+Install the wheel directly if you prefer not to clone:
+
+```bash
+pip install framemill-0.1.0-py3-none-any.whl
+framemill
+```
+
+> **The platform binaries are unsigned, best-effort, and pre-release.** They are a
+> convenience, not the primary distribution channel. If anything looks off, prefer
+> [installing from source](#option-1-from-source-recommended) or the wheel. You still need
 > [Blender](#blender-required) installed separately.
 
 ### Security warnings on unsigned builds

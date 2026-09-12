@@ -8,7 +8,10 @@ pages below go deeper.
 
 - **[Installation](installation.md):** install on Windows / macOS / Linux, from source
   or prebuilt binaries, plus Blender setup and unsigned-build security warnings.
+- **[Workflow and sampling](workflow.md):** the model-to-sheet pipeline, how frames are
+  sampled, and first-frame replacement.
 - **[Command line (CLI)](cli.md):** `render`, `inspect`, and every flag, for scripting and CI.
+- **[Troubleshooting](troubleshooting.md):** facing, framing, textures, palettes, and output conventions.
 
 ## Reference
 

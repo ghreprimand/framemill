@@ -1,0 +1,93 @@
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  # Primary artifacts: the from-source wheel and sdist. These always ship.
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install build
+      - run: python -m build
+      - run: python -m pip install dist/*.whl && framemill --help
+      - name: Publish GitHub release with wheel + sdist
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+
+  # Convenience platform binaries. Best-effort: a build failure here must not fail
+  # the release or block the wheel/sdist above. Uploaded to the release only if built.
+  binaries:
+    needs: release
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: linux
+          - os: windows-latest
+            target: windows
+          - os: macos-latest
+            target: macos
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: "3.24.5"
+
+      - name: Linux build deps
+        if: matrix.target == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build libgtk-3-dev libmpv-dev mpv \
+            libsecret-1-dev libunwind-dev
+
+      - name: Install flet
+        run: pip install "flet[cli]==0.86.5"
+
+      - name: Build (${{ matrix.target }})
+        id: build
+        continue-on-error: true
+        run: flet build ${{ matrix.target }} -v --module-name main --artifact framemill --exclude .venv venv env .archon .git tests sample_models scratch tmp_render .pytest_cache .ruff_cache .env ".env.*" "*.log" "*.recipe.json" docs packaging
+
+      - name: Package AppImage
+        if: matrix.target == 'linux' && steps.build.outcome == 'success'
+        continue-on-error: true
+        run: |
+          if command -v appimagetool >/dev/null 2>&1; then
+            bash packaging/build_appimage.sh
+          else
+            echo 'Trusted appimagetool not installed; skipping AppImage.'
+          fi
+
+      - name: Archive bundle
+        if: steps.build.outcome == 'success'
+        continue-on-error: true
+        run: |
+          cd build && zip -r "../framemill-${{ matrix.target }}.zip" . || true
+
+      - name: Attach binaries to the release
+        if: steps.build.outcome == 'success'
+        continue-on-error: true
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            framemill-${{ matrix.target }}.zip
+            dist/*.AppImage
