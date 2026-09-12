@@ -10,7 +10,7 @@ pages below go deeper.
   Linux AppImage, or from source, with per-platform update commands and Blender setup.
 - **[Workflow and sampling](workflow.md):** the model-to-sheet pipeline, how frames are
   sampled, and first-frame replacement.
-- **[Command line (CLI)](cli.md):** `render`, `inspect`, and every flag, for scripting and CI.
+- **[Command line (CLI)](cli.md):** `render`, `inspect`, `--version`, shortcut commands, and every flag.
 - **[Troubleshooting](troubleshooting.md):** facing, framing, textures, palettes, and output conventions.
 
 ## Reference

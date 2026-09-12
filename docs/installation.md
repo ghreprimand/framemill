@@ -135,6 +135,32 @@ See the [CLI reference](cli.md) for all commands and flags.
 
 ---
 
+## Desktop shortcut
+
+pipx and venv installs put `framemill` on PATH but do not add an application-menu
+entry. After the command is available, install a per-user launcher:
+
+```bash
+framemill install-shortcut
+```
+
+Or click **Add to applications** next to Help in the GUI (hidden below 1000 px
+window width). Both look up `framemill-gui` on PATH, then `framemill`.
+
+What is written:
+
+- **Linux:** `~/.local/share/applications/framemill.desktop` and a hicolor SVG icon
+- **macOS:** `~/Applications/framemill.app`
+- **Windows:** a Start Menu `framemill.lnk` and a user-data `.ico`
+
+Remove only those launcher files (this does not uninstall framemill):
+
+```bash
+framemill uninstall-shortcut
+```
+
+---
+
 ## Installing a specific version or the wheel
 
 Every release also attaches the **wheel** and **sdist** to the
@@ -163,5 +189,8 @@ pipx install ./framemill-0.1.8-py3-none-any.whl
 - **pipx:** `pipx uninstall framemill`.
 - **AppImage:** delete the file.
 - **From source:** delete the cloned folder and its `.venv`.
+
+If you added a desktop launcher, run `framemill uninstall-shortcut` before
+uninstalling so the menu entry does not point at a missing command.
 
 Optionally remove `config.json` from the config directory above for a clean slate.

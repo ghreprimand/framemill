@@ -13,7 +13,7 @@ from pathlib import Path
 import flet as ft
 from PIL import Image
 
-from . import appconfig, blender, compositor, export, help_content, recipe
+from . import __version__, appconfig, blender, compositor, export, help_content, recipe, shortcut
 from .export import DEFAULT_EXPORT, EXPORT_PRESETS, ExportConfig
 from .preview_schedule import PREVIEW_DEBOUNCE_S, after_render_job, user_cancel
 from .settings import PRESETS, RenderSettings, direction_names, next_playback_frame
@@ -1154,6 +1154,7 @@ def main(page: ft.Page) -> None:
             bgcolor=PANEL, shape=ft.RoundedRectangleBorder(radius=16),
             title=ft.Row([
                 text("Help", 22, TEXT, ft.FontWeight.W_600),
+                text(f"v{__version__}", 12, MUTED),
                 ft.Container(search_field, expand=True),
             ], spacing=16),
             content=body,
@@ -1626,14 +1627,27 @@ def main(page: ft.Page) -> None:
     breadcrumb = ft.Row([text("/", 18, FAINT), text("Sprite workspace", 12, MUTED)], tight=True)
     guide_btn = ft.TextButton("Help", icon=ft.Icons.HELP_OUTLINE, on_click=open_help,
                               style=ft.ButtonStyle(color=MUTED))
+
+    def add_to_applications(e=None):
+        try:
+            path = shortcut.install_shortcut()
+        except Exception as exc:  # noqa: BLE001  status line is the user-facing error
+            notify(str(exc))
+            return
+        notify(f"Added to applications: {path}")
+
+    shortcut_btn = ft.TextButton(
+        "Add to applications", icon=ft.Icons.APPS, on_click=add_to_applications,
+        style=ft.ButtonStyle(color=MUTED))
     topbar = ft.Container(padding=ft.Padding(22, 14, 22, 14), bgcolor=PANEL,
         border=ft.Border(bottom=ft.BorderSide(1, BORDER)), content=ft.Row([
             ft.Container(ft.Icon(ft.Icons.FILTER_FRAMES_OUTLINED, size=21, color=INK),
                          bgcolor=ACCENT, padding=8, border_radius=8),
             text("framemill", 20, TEXT, ft.FontWeight.W_600),
+            text(f"v{__version__}", 11, MUTED),
             breadcrumb,
             ft.Container(expand=True),
-            guide_btn, export_btn,
+            guide_btn, shortcut_btn, export_btn,
         ], spacing=12))
     reset_btn = ft.TextButton("Reset to defaults", icon=ft.Icons.RESTART_ALT, on_click=confirm_reset,
                               style=ft.ButtonStyle(color=MUTED, text_style=ft.TextStyle(size=11)))
@@ -1649,6 +1663,7 @@ def main(page: ft.Page) -> None:
         width, height = page.width or 1440, page.height or 940
         breadcrumb.visible = width >= 1200
         guide_btn.visible = width >= 1000
+        shortcut_btn.visible = width >= 1000
         empty_icon.visible = height >= 850 and width >= 1000
         empty_tagline.visible = height >= 950
         workspace.padding = ft.Padding(16, 14, 16, 12) if width < 1100 else (

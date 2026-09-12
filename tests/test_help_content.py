@@ -24,6 +24,8 @@ def test_search_empty_and_keywords():
     assert help_content.search("master palette file")[0].id == "create-master-palette"
     assert help_content.search("create palette")
     assert help_content.search("fit basis")
+    assert help_content.search("add to applications")[0].id == "desktop-shortcut"
+    assert help_content.search("install-shortcut")
     assert help_content.article_by_id("custom-fixed-colours").category == "export"
     assert help_content.article_by_id("create-master-palette").category == "export"
 

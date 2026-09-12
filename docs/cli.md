@@ -7,7 +7,9 @@ CI. It shares the same settings validation as the GUI.
 framemill <command> [options]
 ```
 
-Commands: `render`, `inspect`, `gui`.
+Commands: `render`, `inspect`, `gui`, `install-shortcut`, `uninstall-shortcut`.
+Top-level: `framemill --version` prints the installed version and exits without launching
+the GUI.
 
 ## render
 
@@ -51,6 +53,27 @@ Launch the desktop app (same as running `framemill` with no command in most setu
 
 ```bash
 framemill gui
+```
+
+## --version
+
+Print the installed package version and exit. This is a top-level flag, not a
+subcommand, so it never starts the GUI.
+
+```bash
+framemill --version
+# framemill 0.1.8
+```
+
+## install-shortcut / uninstall-shortcut
+
+Write or remove a per-user desktop launcher for the GUI. The command looks up
+`framemill-gui` on PATH, then `framemill`. See [Desktop shortcut](installation.md#desktop-shortcut)
+for the files each OS creates.
+
+```bash
+framemill install-shortcut
+framemill uninstall-shortcut
 ```
 
 ## CLI scope vs the GUI

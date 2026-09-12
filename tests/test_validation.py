@@ -97,6 +97,15 @@ def test_fixed_framing_uses_explicit_origin_not_clip_bounds():
     assert framing_target((99, 99, 99), (1, 1, 10), s) == (1, 2, 3)
 
 
+def test_cli_version_prints_package_version(capsys):
+    from framemill import __version__
+
+    with pytest.raises(SystemExit) as exited:
+        cli.main(["--version"])
+    assert exited.value.code in (0, None)
+    assert f"framemill {__version__}" in capsys.readouterr().out
+
+
 def test_cli_rejects_invalid_frames_and_formats(capsys):
     with pytest.raises(SystemExit) as exited:
         cli.main(["render", "walk.fbx", "-o", "out", "--frames", "0"])

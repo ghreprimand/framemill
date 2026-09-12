@@ -8,7 +8,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-from . import blender, compositor, recipe
+from . import __version__, blender, compositor, recipe, shortcut
 from .settings import DEFAULT_PRESET, PRESETS, RenderSettings
 
 CLI_FORMATS = {"png", "tga"}
@@ -107,8 +107,29 @@ def _cmd_gui(_: argparse.Namespace) -> None:
     run()
 
 
+def _cmd_install_shortcut(_: argparse.Namespace) -> None:
+    try:
+        path = shortcut.install_shortcut()
+    except Exception as exc:  # noqa: BLE001  user-facing CLI error
+        sys.exit(str(exc))
+    print(f"created {path}")
+
+
+def _cmd_uninstall_shortcut(_: argparse.Namespace) -> None:
+    try:
+        paths = shortcut.uninstall_shortcut()
+    except Exception as exc:  # noqa: BLE001  user-facing CLI error
+        sys.exit(str(exc))
+    if paths:
+        for path in paths:
+            print(f"removed {path}")
+        return
+    print("no shortcut files found")
+
+
 def main(argv: list[str] | None = None) -> None:
     p = argparse.ArgumentParser(prog="framemill", description="3D model -> directional sprite sheet.")
+    p.add_argument("--version", action="version", version=f"framemill {__version__}")
     p.add_argument("--blender", help="path to the Blender executable")
     sub = p.add_subparsers(dest="cmd", required=False)
 
@@ -131,6 +152,12 @@ def main(argv: list[str] | None = None) -> None:
 
     g = sub.add_parser("gui", help="launch the desktop app")
     g.set_defaults(func=_cmd_gui)
+
+    sc = sub.add_parser("install-shortcut", help="install a per-user desktop launcher")
+    sc.set_defaults(func=_cmd_install_shortcut)
+
+    usc = sub.add_parser("uninstall-shortcut", help="remove the per-user desktop launcher")
+    usc.set_defaults(func=_cmd_uninstall_shortcut)
 
     args = p.parse_args(argv)
     if not args.cmd:

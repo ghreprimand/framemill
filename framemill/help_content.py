@@ -75,7 +75,7 @@ CATEGORIES: list[Category] = [
     Category("orientation", "Direction & orientation", 9,
              "South as front, sheet order vs mesh yaw, clockwise-from-N."),
     Category("cli", "Command line (CLI)", 10,
-             "render, inspect, gui, and every flag."),
+             "render, inspect, gui, --version, and desktop shortcut commands."),
     Category("troubleshooting", "Troubleshooting", 11,
              "Facing, clipping, textures, palettes, config location."),
     Category("concepts", "How it works", 12,
@@ -229,6 +229,30 @@ ARTICLES: list[Article] = [
             ]),
         ],
         ("with skin", "in place", "t-pose", "fbx binary"),
+    ),
+    Article(
+        "desktop-shortcut", "Add to applications", "getting-started",
+        [
+            ("p", _t(
+                "pipx and venv installs put framemill on PATH but do not create a ",
+                "desktop launcher. Add to applications writes a per-user shortcut so ",
+                "the GUI appears in your application menu.",
+            )),
+            ("li", [
+                "Linux: ~/.local/share/applications/framemill.desktop plus a hicolor SVG icon.",
+                "macOS: ~/Applications/framemill.app.",
+                "Windows: a Start Menu framemill.lnk and a user-data .ico.",
+            ]),
+            ("p", _t(
+                "The button sits next to Help on the top bar (hidden below 1000 px width). ",
+                "It looks up framemill-gui on PATH, then framemill. The same action is ",
+                "available from the command line.",
+            )),
+            ("kbd", "framemill install-shortcut"),
+            ("kbd", "framemill uninstall-shortcut"),
+            ("p", "Uninstall removes only those launcher files. It does not uninstall framemill."),
+        ],
+        ("add to applications", "install-shortcut", "desktop shortcut", "launcher"),
     ),
     Article(
         "sidebar-areas", "Sidebar areas", "workspace",
@@ -714,8 +738,11 @@ ARTICLES: list[Article] = [
             ("h", "Subcommands"),
             ("li", [
                 "framemill (no subcommand) or framemill gui: launch the desktop app.",
+                "framemill --version: print the installed version and exit (does not launch the GUI).",
                 "framemill render: render a sheet.",
                 "framemill inspect: print animation frame range, action and fps as JSON.",
+                "framemill install-shortcut: write a per-user desktop launcher.",
+                "framemill uninstall-shortcut: remove that launcher.",
             ]),
             ("h", "render flags"),
             ("li", [
@@ -740,7 +767,8 @@ ARTICLES: list[Article] = [
                 "are rejected before Blender starts.",
             )),
         ],
-        ("--frames", "--recipe", "--magic-pink", "--metadata", "inspect"),
+        ("--frames", "--recipe", "--magic-pink", "--metadata", "inspect",
+         "--version", "install-shortcut"),
     ),
     Article(
         "troubleshooting", "Common problems", "troubleshooting",
@@ -935,6 +963,14 @@ ARTICLES: list[Article] = [
             gotcha="Search replaces the category tree with ranked results until you clear the field.",
         )
         + _ctl(
+            "Add to applications",
+            "Writes a per-user desktop launcher for the GUI.",
+            options="Linux .desktop, macOS .app, or Windows Start Menu .lnk",
+            default="Off until you click it; hidden below 1000 px window width",
+            effect="Looks up framemill-gui (then framemill) on PATH and installs the launcher plus icon.",
+            gotcha="Needs those commands on PATH. Same action as framemill install-shortcut. Does not install framemill itself.",
+        )
+        + _ctl(
             "Status line and progress bar",
             "Current activity, errors, and render progress.",
             options="Text plus a thin bar while busy",
@@ -943,7 +979,7 @@ ARTICLES: list[Article] = [
             gotcha="A failed job prints the error here. Correct highlighted fields before rendering.",
         ),
         ("choose a model", "recenter", "base size", "locate blender", "reset to defaults",
-         "frame strip", "checkerboard", "viewer fps"),
+         "frame strip", "checkerboard", "viewer fps", "add to applications"),
     ),
     Article(
         "ref-source", "Source panel controls", "reference",
@@ -1474,6 +1510,7 @@ CONTROL_KEYWORDS: tuple[str, ...] = (
     "alpha cutoff", "viewer fps", "reset to defaults", "master palette",
     "remove root motion", "custom colours", "fixed colours",
     "master palette file", "create palette", "fit basis",
+    "add to applications", "install-shortcut",
 )
 
 
