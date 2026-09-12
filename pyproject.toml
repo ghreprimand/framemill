@@ -7,7 +7,8 @@ name = "framemill"
 version = "0.1.1"
 description = "Turn a rigged 3D model into a directional 2D sprite sheet, using Blender headless. No Blender knowledge required."
 readme = "README.md"
-license = { file = "LICENSE" }
+license = "GPL-3.0-only"
+license-files = ["LICENSE"]
 requires-python = ">=3.10"
 keywords = ["sprite", "spritesheet", "blender", "gamedev", "pixel-art", "2d", "fbx", "gltf"]
 authors = [{ name = "The framemill authors" }]
@@ -15,7 +16,6 @@ classifiers = [
   "Development Status :: 3 - Alpha",
   "Environment :: X11 Applications",
   "Intended Audience :: Developers",
-  "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
   "Programming Language :: Python :: 3",
   "Topic :: Multimedia :: Graphics",
   "Topic :: Games/Entertainment",
