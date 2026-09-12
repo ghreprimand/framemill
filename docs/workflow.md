@@ -40,8 +40,10 @@ applies ready-made animations.
 **Pick an animation**
 
 - Choose a motion, for example "Walking", "Idle", or an attack.
-- For anything the game moves across the ground, turn **In Place** on. framemill does not
-  remove root motion, so an in-place cycle keeps the character centered in every frame.
+- For anything the game moves across the ground, turn **In Place** on so the cycle keeps
+  the character centered in every frame. If a clip already has its travel baked in, you can
+  instead enable **Remove root motion** in framemill (Layout & timing) to re-center each
+  frame at render time.
 
 **Download with the settings framemill needs**
 

@@ -24,10 +24,13 @@ downscaling, sprite-sheet layout, legacy-engine TGA output) are handled for you.
 - Import **FBX, glTF/GLB, OBJ**; 1 / 4 / 8 / 16 directions; configurable frames and dimensions.
 - Automatic preview, sprite/sheet views, instant direction switching, and playback.
 - Direction order, row/column layout, loop or one-shot sampling, source-range trim, phase, reverse.
+- Optional root-motion removal that re-centers a travelling clip in every frame.
 - Source-facing yaw, shared framing (fit or fixed world scale), anchors, and output offsets.
 - Presets (**Generic PBR**, **Tripo**, **Mixamo**) plus full camera, lighting, and colour controls.
 - Export dialog with a processed preview: **PNG / TGA / BMP**, 32/24/8-bit, alpha or colour-key
-  backgrounds, edge bleed, dithering, custom palettes, and target presets.
+  backgrounds, edge bleed, dithering, and target presets.
+- Master palettes: share a scene's exact indexed palette (a file or a fixed colour list) so
+  8-bit sheets line up with a DOS-style shared palette, with the transparent key at index 0.
 - Versioned portable recipes and an optional JSON animation-metadata sidecar.
 - A searchable in-app Help browser documenting every control.
 

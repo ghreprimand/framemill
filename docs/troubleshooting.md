@@ -7,10 +7,10 @@
   (quarter turns or yaw) to rotate the imported source and its animation. That does not
   change sheet order. See [Orientation](orientation.md).
 - **Character drifts or looks too small:** motion that translates through space contributes
-  to the whole-clip bounds. Prepare an in-place animation if your game moves the actor.
-  framemill does not remove root motion. For matching clips, use Fixed world scale and the
-  same world-unit origin plus output offsets (+X right, +Y down in the cell) rather than
-  Fit-this-clip.
+  to the whole-clip bounds. Prefer an in-place animation if your game moves the actor, or
+  enable **Remove root motion** (Layout & timing) to re-center each frame at render time.
+  For matching clips across sheets, use Fixed world scale and the same world-unit origin
+  plus output offsets (+X right, +Y down in the cell) rather than Fit-this-clip.
 - **Weapons, feet, or wide poses are clipped:** increase Camera → Fit multiplier or Fixed
   world scale and render again; larger values make the model smaller. Check all directions
   and extreme poses. Fit mode uses model height and the compositor crops to the sprite
@@ -30,10 +30,13 @@
   Dithering reduces colours for indexed output. Edge bleed copies RGB into transparent
   pixels without enlarging the silhouette; it does not add spacing between cells or remove
   an opaque outline.
-- **Indexed engine palettes:** adaptive palettes can differ between sheets. Supply the same
-  palette for related animations. If the key colour is absent, framemill prepends it and
-  truncates to 256 entries, which can change palette indices. Verify the result against your
-  engine's exact index requirements.
+- **Indexed engine palettes:** adaptive palettes can differ between sheets, so supply the
+  same master palette (a file or a fixed colour list) for related animations. A supplied
+  palette keeps its colour order exactly and is never reordered, so the sheet stays in sync
+  with a scene's shared palette. For indexed output the transparent key (magic pink) must be
+  present, usually at index 0; if it is missing the export stops with a clear message.
+  Adaptive palettes place the key at index 0 automatically. See
+  [Recipes & metadata](recipes-and-metadata.md) for building a master palette.
 
 ## Layout and mapping
 

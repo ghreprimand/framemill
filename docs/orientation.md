@@ -42,10 +42,10 @@ into an engine that numbers directions differently.
 
 - **Model faces sideways or backward:** use Source facing (quarter turns or yaw). Sheet
   order and preview facing will not fix it.
-- **Character drifts, is small, or is clipped:** framemill does not remove root motion.
-  Prepare an in-place animation when the game moves the actor. For matching walk, idle, and
-  attack sheets, use Fixed world scale with the same world-unit origin and output offsets
-  rather than Fit-this-clip. Increase the fit multiplier or fixed scale to make the sprite
-  smaller.
+- **Character drifts, is small, or is clipped:** prefer an in-place animation when the game
+  moves the actor, or enable **Remove root motion** (Layout & timing) to re-center each
+  frame at render time. For matching walk, idle, and attack sheets, use Fixed world scale
+  with the same world-unit origin and output offsets rather than Fit-this-clip. Increase the
+  fit multiplier or fixed scale to make the sprite smaller.
 - **Up-axis correction and free 3D orbit are not provided.** The viewer shows rendered
   sprites, not a freely orbitable 3D model.

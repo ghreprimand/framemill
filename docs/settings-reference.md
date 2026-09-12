@@ -35,6 +35,7 @@ See [Orientation](orientation.md) for the full direction model.
 | `anim_start_override` | none | Trim the detected source start frame. |
 | `anim_end_override` | none | Trim the detected source end frame. |
 | `idle_frame_index` | none | Advanced first-frame replacement slot. |
+| `remove_root_motion` | `false` | Re-center the camera and light on the character every frame so a travelling clip stays centered in the cell. Fit sizing then uses the largest single-frame extent. Leave off when the source is already in-place (for example Mixamo In Place). |
 
 ## Source facing
 
@@ -95,10 +96,18 @@ without rendering again.
 | `alpha_cutoff` | `128` | Threshold for `hard` alpha. |
 | `dilate` | `0` | Edge-bleed iterations in pixels. Extends hidden RGB, not the silhouette. |
 | `dither` | `none` | `none`, `ordered`, or `floyd`. For reduced-colour output. |
-| `palette_source` | `auto` | `auto`, `file`, or `fixed`. |
-| `palette_path` | none | Palette file when `palette_source` is `file`. |
+| `palette_source` | `auto` | `auto` builds an adaptive palette from the sheet; `file` loads a master palette; `fixed` uses colours you enter. |
+| `palette_path` | none | Master palette file when `palette_source` is `file`. Accepts an indexed BMP, PNG, or GIF, or a `.pal`, `.gpl`, or `.hex` file. |
 | `palette_colors` | `256` | Colours for the adaptive (`auto`) palette. |
+| `fixed_palette` | none | Ordered colour list when `palette_source` is `fixed`. The first colour is index 0. |
 | `write_metadata` | `false` | Write a JSON sidecar next to the image. |
+
+The `file` and `fixed` palettes keep their colour order exactly and are never reordered
+or prepended, so an 8-bit sheet can share a scene's global palette (for example the
+game's `BG_00.BMP`). For indexed output the transparent key (magic pink) must be present
+in the palette, usually at index 0; if it is missing the export stops with a clear error.
+Adaptive palettes place the key at index 0 automatically. See
+[Recipes & metadata](recipes-and-metadata.md) for how to build and share a master palette.
 
 Built-in export presets: PNG RGBA (modern), PNG engine atlas (dilated), TGA magic-pink
 (legacy 2D), and BMP 8-bit indexed (DOS). See [Recipes & metadata](recipes-and-metadata.md)
