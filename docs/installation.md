@@ -40,6 +40,16 @@ Install pipx if you do not have it:
 
 After `pipx ensurepath`, open a new terminal so the updated PATH takes effect.
 
+**Windows note:** right after installing pipx, the `pipx` command may not be found because
+its scripts folder is not on PATH yet. Call it through Python until you reopen the terminal:
+
+```powershell
+python -m pipx install framemill
+python -m pipx ensurepath
+```
+
+Then close and reopen PowerShell, after which `pipx` and `framemill` work directly.
+
 If you cannot or would rather not install pipx, a plain virtual environment works on any
 system:
 
