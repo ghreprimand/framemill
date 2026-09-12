@@ -110,7 +110,6 @@ framemill is free software licensed **GPL-3.0-only**. See [LICENSE](LICENSE).
 Copyright (C) 2026 Unfinished Works. You are free to use, study, share, and modify it. If
 you distribute it or a modified version, you must pass on those same freedoms under the GPL
 and make your source available; the GPL does not permit incorporating framemill into
-proprietary, closed-source software. (You can still charge for it; "free" here means
-freedom, not price.)
+proprietary, closed-source software.
 
 framemill is part of **[Unfinished Works](https://unfinished-works.com)**.
