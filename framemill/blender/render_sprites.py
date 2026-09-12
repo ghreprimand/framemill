@@ -24,6 +24,9 @@ DIRECTIONS = {
          "N", "NNW", "NW", "WNW", "W", "WSW", "SW", "SSW"],
 }
 
+# Feet anchor leaves this fraction of the framed height as ground below the feet.
+FEET_GROUND_MARGIN = 0.05
+
 
 def log(msg):
     print(msg, flush=True)
@@ -170,7 +173,12 @@ def camera_target(center, size, cfg):
                 float(cfg.get("framing_origin_y", 0.0) or 0.0),
                 float(cfg.get("framing_origin_z", 0.0) or 0.0))
     if cfg.get("anchor") == "feet":
-        return (center[0], center[1], center[2] - size[2] / 2.0)
+        # Sit the feet near the bottom of the framed area, full body above.
+        # The ortho window height is the ortho scale; put the lowest point a
+        # small margin above the window's bottom edge.
+        scale = camera_ortho_scale(size, cfg)
+        feet_z = center[2] - size[2] / 2.0
+        return (center[0], center[1], feet_z + scale / 2.0 - scale * FEET_GROUND_MARGIN)
     return center
 
 

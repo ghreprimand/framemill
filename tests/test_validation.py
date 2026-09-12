@@ -72,10 +72,22 @@ def test_fixed_framing_ignores_clip_height():
     assert framing_ortho_scale(fit, 4) == 8
 
 
-def test_feet_anchor_uses_lowest_z_not_center():
+def test_feet_anchor_frames_full_body_with_feet_low():
+    # Feet anchor sits the feet near the bottom of the framed window with the
+    # whole body above, not centred on the feet (which would clip the head).
+    from framemill.settings import framing_ortho_scale
     s = RenderSettings(anchor="feet")
-    assert framing_target((0, 0, 2), (1, 1, 4), s) == (0, 0, 0)
-    assert framing_target((0, 0, 2), (1, 1, 4), RenderSettings(anchor="center")) == (0, 0, 2)
+    center, size = (0, 0, 2), (1, 1, 4)
+    scale = framing_ortho_scale(s, size[2])
+    aim = framing_target(center, size, s)
+    feet_z = center[2] - size[2] / 2.0
+    head_z = center[2] + size[2] / 2.0
+    window_bottom = aim[2] - scale / 2.0
+    window_top = aim[2] + scale / 2.0
+    assert window_bottom < feet_z            # a little ground below the feet
+    assert feet_z - window_bottom < scale * 0.1
+    assert window_top > head_z               # head stays inside the frame
+    assert framing_target(center, size, RenderSettings(anchor="center")) == (0, 0, 2)
 
 
 def test_fixed_framing_uses_explicit_origin_not_clip_bounds():

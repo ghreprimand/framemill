@@ -27,6 +27,8 @@ MAX_FRAMES = 64
 MAX_CELL = 1024
 MIN_RENDER = 16
 MAX_RENDER = 8192
+# Feet anchor leaves this fraction of the framed height as ground below the feet.
+FEET_GROUND_MARGIN = 0.05
 # Sheet RGBA budget (~256 MiB). Individual dimensions can still pass on their own.
 MAX_SHEET_PIXELS = 64_000_000
 # Limit each sequential render buffer, independently of animation length.
@@ -143,7 +145,11 @@ def framing_target(
         return (float(settings.framing_origin_x), float(settings.framing_origin_y),
                 float(settings.framing_origin_z))
     if settings.anchor == "feet":
-        return (center[0], center[1], center[2] - size[2] / 2.0)
+        # Sit the feet near the bottom of the framed area with the full body
+        # above, rather than centring the window on the feet.
+        scale = framing_ortho_scale(settings, size[2])
+        feet_z = center[2] - size[2] / 2.0
+        return (center[0], center[1], feet_z + scale / 2.0 - scale * FEET_GROUND_MARGIN)
     return (center[0], center[1], center[2])
 
 
