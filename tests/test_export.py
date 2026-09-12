@@ -133,3 +133,46 @@ def test_unsupported_transparency_combination_is_explicit():
     import pytest
     with pytest.raises(ValueError, match="32-bit PNG or TGA"):
         export.process(_sprite(), ExportConfig(format="bmp", depth=8, background="transparent"))
+
+
+def test_valid_backgrounds_match_format_depth():
+    assert export.valid_backgrounds("png", 32) == ["transparent", "solid"]
+    assert export.valid_backgrounds("tga", 32) == ["transparent", "solid", "magic_pink"]
+    assert export.valid_backgrounds("png", 24) == ["magic_pink", "solid"]
+    assert export.valid_backgrounds("png", 8) == ["magic_pink", "solid"]
+    assert export.valid_backgrounds("bmp", 32) == ["magic_pink", "solid"]
+    assert export.valid_backgrounds("bmp", 24) == ["magic_pink", "solid"]
+    assert "magic_pink" not in export.valid_backgrounds("png", 32)
+    assert "transparent" not in export.valid_backgrounds("tga", 24)
+
+
+def test_format_depth_switch_never_leaves_invalid_background():
+    cfg = ExportConfig(format="tga", depth=32, background="magic_pink", alpha_mode="hard")
+    cfg.format = "png"
+    export.apply_export_capabilities(cfg, capability_changed=True)
+    assert cfg.background in export.valid_backgrounds(cfg.format, cfg.depth)
+    assert cfg.background == "transparent"
+
+    cfg.format = "bmp"
+    cfg.depth = 32
+    export.apply_export_capabilities(cfg, capability_changed=True)
+    assert cfg.format == "bmp"
+    assert cfg.depth == 24
+    assert cfg.background == "magic_pink"
+    assert cfg.alpha_mode == "hard"
+
+    cfg.background = "solid"
+    cfg.alpha_mode = "soft"
+    export.apply_export_capabilities(cfg, capability_changed=False)
+    assert cfg.background == "solid"
+    assert cfg.alpha_mode == "soft"
+
+    cfg.format = "tga"
+    cfg.depth = 32
+    cfg.background = "magic_pink"
+    export.apply_export_capabilities(cfg, capability_changed=True)
+    assert cfg.background == "magic_pink"
+
+    import pytest
+    with pytest.raises(ValueError, match="background that matches"):
+        export.validate_config(ExportConfig(format="png", depth=32, background="magic_pink"))

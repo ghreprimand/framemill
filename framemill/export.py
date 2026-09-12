@@ -16,6 +16,24 @@ from PIL import Image
 RGB = tuple[int, int, int]
 MAGENTA: RGB = (255, 0, 255)
 
+BACKGROUND_LABELS = {
+    "transparent": "Transparent · alpha",
+    "solid": "Solid colour",
+    "magic_pink": "Magic pink · colour key",
+}
+
+
+def valid_backgrounds(fmt: str, depth: int) -> list[str]:
+    """Backgrounds the export dialog may offer for this format and depth."""
+    alpha = depth == 32 and fmt != "bmp"
+    if alpha:
+        opts = ["transparent", "solid"]
+        if fmt == "tga":
+            opts.append("magic_pink")
+        return opts
+    return ["magic_pink", "solid"]
+
+
 # 4x4 Bayer matrix (normalised 0..1) for ordered dithering.
 _BAYER4 = np.array([
     [0, 8, 2, 10],
@@ -40,6 +58,26 @@ class ExportConfig:
     palette_colors: int = 256           # for auto
     fixed_palette: list[RGB] | None = None
     write_metadata: bool = False        # optional JSON sidecar next to the image
+
+
+def apply_export_capabilities(cfg: ExportConfig, *, capability_changed: bool = False) -> ExportConfig:
+    """Keep format, depth, background, and alpha_mode a reachable pairing.
+
+    capability_changed is True after Format or Colour depth changes. Then an
+    invalid leftover background is reset to the first valid option. Direct
+    Background edits pass False so a user pick is not overwritten.
+    """
+    if cfg.format == "bmp" and cfg.depth == 32:
+        cfg.depth = 24
+    if (cfg.depth != 32 or cfg.format == "bmp") and cfg.background == "transparent":
+        cfg.background = "magic_pink"
+    if capability_changed:
+        allowed = valid_backgrounds(cfg.format, cfg.depth)
+        if cfg.background not in allowed:
+            cfg.background = allowed[0]
+    if cfg.background == "magic_pink":
+        cfg.alpha_mode = "hard"
+    return cfg
 
 
 # ----------------------------------------------------------------- colour utils
@@ -240,6 +278,8 @@ def validate_config(cfg: ExportConfig) -> None:
         raise ValueError("Choose a supported background.")
     if cfg.background == "transparent" and (cfg.depth != 32 or cfg.format == "bmp"):
         raise ValueError("Transparent output requires 32-bit PNG or TGA. Use a colour key for indexed output.")
+    if cfg.background not in valid_backgrounds(cfg.format, cfg.depth):
+        raise ValueError("Choose a background that matches this format and colour depth.")
     if cfg.format == "bmp" and cfg.depth == 32:
         raise ValueError("Choose 24-bit or indexed 8-bit for BMP.")
     if cfg.alpha_mode not in ("soft", "hard"):
