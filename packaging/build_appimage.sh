@@ -38,13 +38,15 @@ DESKTOP
 # python-appimage expects an icon file named after the app.
 cp framemill/assets/icon.svg "$RECIPE/framemill.svg"
 
-# The entrypoint is what the AppImage runs. Launch the GUI module with the
-# bundled interpreter (python-appimage puts it on PATH as python3).
-cat > "$RECIPE/entrypoint" <<'ENTRY'
+# The entrypoint is what the AppImage runs. python-appimage globs for a file
+# named "entrypoint.*" and renders it as a template, so the file must have an
+# extension and reference the bundled interpreter via {{ python-executable }}.
+# A plain "entrypoint" (no extension) is ignored and the AppImage would fall
+# back to launching a bare Python interpreter instead of framemill.
+cat > "$RECIPE/entrypoint.sh" <<'ENTRY'
 #! /bin/bash
-exec python3 -m framemill.app "$@"
+exec "{{ python-executable }}" -m framemill.app "$@"
 ENTRY
-chmod +x "$RECIPE/entrypoint"
 
 # Produces framemill-<pyver>-x86_64.AppImage in the current directory.
 python-appimage build app -p "$PYVER" "$RECIPE"

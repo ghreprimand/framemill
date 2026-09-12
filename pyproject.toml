@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "framemill"
-version = "0.1.1"
+version = "0.1.2"
 description = "Turn a rigged 3D model into a directional 2D sprite sheet, using Blender headless. No Blender knowledge required."
 readme = "README.md"
 license = "GPL-3.0-only"
