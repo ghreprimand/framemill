@@ -171,6 +171,7 @@ class RenderSettings:
 
     # --- Source orientation (independent of sheet order and preview facing) ---
     source_yaw: float = 0.0         # degrees around world Z after import
+    remove_root_motion: bool = False  # re-center travelling clips per frame
 
     # --- Shared framing (locked scale / anchor for related clips) ---
     framing_mode: str = "fit"       # fit | fixed

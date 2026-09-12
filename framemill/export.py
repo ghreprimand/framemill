@@ -146,9 +146,29 @@ def flatten(img: Image.Image, key: RGB) -> Image.Image:
     return Image.fromarray(rgb, "RGB")
 
 
+PALETTE_FILE_EXTS = {".pal", ".gpl", ".hex", ".txt", ".bmp", ".png", ".gif"}
+IMAGE_PALETTE_EXTS = {".bmp", ".png", ".gif"}
+
+
+def _load_indexed_image_palette(path: str) -> list[RGB]:
+    image = Image.open(path)
+    if image.mode != "P":
+        raise ValueError(
+            "That image has no fixed palette. Use an indexed BMP/PNG, or a .pal/.gpl/.hex file."
+        )
+    pal = image.getpalette() or []
+    colors = [tuple(pal[i:i + 3]) for i in range(0, min(len(pal), 256 * 3), 3)]
+    if not colors:
+        raise ValueError(f"No colours parsed from palette: {path}")
+    return [(int(c[0]), int(c[1]), int(c[2])) for c in colors[:256]]
+
+
 # ----------------------------------------------------------------- palettes
 def load_palette(path: str) -> list[RGB]:
-    """Parse a GIMP .gpl, JASC .pal, or plain hex/rgb list."""
+    """Parse a GIMP .gpl, JASC .pal, hex list, or an indexed BMP/PNG/GIF."""
+    suffix = Path(path).suffix.lower()
+    if suffix in IMAGE_PALETTE_EXTS:
+        return _load_indexed_image_palette(path)
     text = Path(path).read_text(errors="ignore").splitlines()
     colors: list[RGB] = []
     lower = path.lower()
@@ -187,14 +207,29 @@ def load_palette(path: str) -> list[RGB]:
     return colors[:256]
 
 
-def _palette_image(colors: list[RGB]) -> Image.Image:
+def _palette_bytes(colors: list[RGB]) -> list[int]:
+    used = colors[:256]
     flat: list[int] = []
-    for c in colors[:256]:
+    for c in used:
         flat.extend(c)
-    flat += list(colors[-1]) * (256 - len(colors))
+    if not used:
+        return [0, 0, 0] * 256
+    flat += list(used[-1]) * (256 - len(used))
+    return flat
+
+
+def _palette_image(colors: list[RGB]) -> Image.Image:
     pal = Image.new("P", (1, 1))
-    pal.putpalette(flat)
+    pal.putpalette(_palette_bytes(colors))
     return pal
+
+
+def _require_key_in_palette(colors: list[RGB], key: RGB | None) -> None:
+    if key is not None and key not in colors:
+        raise ValueError(
+            "The transparent colour (magic pink) is not in this master palette. "
+            "Add it (usually index 0) or pick a different background."
+        )
 
 
 def _resolve_palette(rgb: Image.Image, cfg: ExportConfig, key: RGB | None) -> list[RGB]:
@@ -202,14 +237,17 @@ def _resolve_palette(rgb: Image.Image, cfg: ExportConfig, key: RGB | None) -> li
         if not cfg.palette_path:
             raise ValueError("Choose a palette file first.")
         colors = load_palette(cfg.palette_path)
-    elif cfg.palette_source == "fixed":
+        _require_key_in_palette(colors, key)
+        return colors
+    if cfg.palette_source == "fixed":
         if not cfg.fixed_palette:
             raise ValueError("Enter at least one fixed palette colour.")
         colors = [tuple(c) for c in cfg.fixed_palette]
-    else:  # auto: adaptive palette from the image
-        q = rgb.quantize(colors=min(cfg.palette_colors, 256), dither=Image.Dither.NONE)
-        pal = q.getpalette() or []
-        colors = [tuple(pal[i:i + 3]) for i in range(0, min(len(pal), 256 * 3), 3)]
+        _require_key_in_palette(colors, key)
+        return colors
+    q = rgb.quantize(colors=min(cfg.palette_colors, 256), dither=Image.Dither.NONE)
+    pal = q.getpalette() or []
+    colors = [tuple(pal[i:i + 3]) for i in range(0, min(len(pal), 256 * 3), 3)]
     if key is not None and key not in colors:
         colors = ([key] + colors)[:256]
     return colors
@@ -296,6 +334,12 @@ def validate_config(cfg: ExportConfig) -> None:
         raise ValueError("Edge bleed cannot be negative.")
     if cfg.palette_source == "file" and not cfg.palette_path:
         raise ValueError("Choose a palette file first.")
+    if cfg.palette_path:
+        suffix = Path(cfg.palette_path).suffix.lower()
+        if suffix and suffix not in PALETTE_FILE_EXTS:
+            raise ValueError(
+                "Palette file must be .pal, .gpl, .hex, .txt, or an indexed .bmp/.png/.gif."
+            )
 
 
 def process(sheet: Image.Image, cfg: ExportConfig) -> Image.Image:
@@ -329,15 +373,14 @@ def process(sheet: Image.Image, cfg: ExportConfig) -> Image.Image:
     rgb = flatten(img, fill)
     if cfg.depth == 24:
         return rgb
+    colors = _resolve_palette(rgb, cfg, key=fill)
     indexed = to_indexed(rgb, cfg, key=fill)
     # Dithering must never perturb the exact key in transparent pixels.
-    palette = indexed.getpalette()
-    key_index = next(i for i in range(256)
-                     if tuple(palette[i * 3:i * 3 + 3]) == fill)
+    key_index = colors.index(fill)
     pixels = np.array(indexed)
     pixels[np.array(img)[:, :, 3] == 0] = key_index
     result = Image.fromarray(pixels, "P")
-    result.putpalette(palette)
+    result.putpalette(_palette_bytes(colors))
     return result
 
 

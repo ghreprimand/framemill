@@ -129,6 +129,85 @@ def test_missing_custom_palette_is_not_silently_adaptive():
         export.process(_sprite(), ExportConfig(depth=8, background="magic_pink", palette_source="file"))
 
 
+def _indexed_image(path: Path, colors: list[tuple[int, int, int]], size=(2, 2)) -> Path:
+    image = Image.new("P", size)
+    flat: list[int] = []
+    for color in colors:
+        flat.extend(color)
+    flat += [0] * (768 - len(flat))
+    image.putpalette(flat)
+    image.putpixel((0, 0), 0)
+    if len(colors) > 1:
+        image.putpixel((1, 0), 1)
+    image.save(path)
+    return path
+
+
+def test_load_palette_indexed_bmp_preserves_order(tmp_path: Path):
+    master = [(255, 0, 255), (200, 30, 30), (0, 0, 0), (10, 20, 40)]
+    path = _indexed_image(tmp_path / "BG_00.BMP", master)
+    colors = export.load_palette(str(path))
+    assert colors[0] == (255, 0, 255)
+    assert colors[:4] == master
+
+
+def test_load_palette_rejects_truecolor_image(tmp_path: Path):
+    import pytest
+    path = tmp_path / "photo.png"
+    Image.new("RGB", (2, 2), (10, 20, 30)).save(path)
+    with pytest.raises(ValueError, match="no fixed palette"):
+        export.load_palette(str(path))
+
+
+def test_eight_bit_master_palette_keeps_order_and_maps_key(tmp_path: Path):
+    master = [(255, 0, 255), (200, 30, 30), (0, 0, 0), (10, 20, 40)]
+    path = _indexed_image(tmp_path / "scene.bmp", master)
+    cfg = ExportConfig(depth=8, background="magic_pink", dither="none",
+                       palette_source="file", palette_path=str(path))
+    source = _sprite()
+    out = export.process(source, cfg)
+    assert out.mode == "P"
+    palette = out.getpalette() or []
+    got = [tuple(palette[i:i + 3]) for i in range(0, len(master) * 3, 3)]
+    assert got == master
+    for y in range(8):
+        for x in range(8):
+            if source.getpixel((x, y))[3] == 0:
+                assert out.getpixel((x, y)) == 0
+    assert out.getpixel((3, 3)) == 1
+
+
+def test_supplied_palette_missing_key_is_an_error(tmp_path: Path):
+    import pytest
+    path = _indexed_image(tmp_path / "no_pink.bmp", [(0, 0, 0), (200, 30, 30)])
+    with pytest.raises(ValueError, match="not in this master palette"):
+        export.process(_sprite(), ExportConfig(
+            depth=8, background="magic_pink", palette_source="file", palette_path=str(path)))
+    with pytest.raises(ValueError, match="not in this master palette"):
+        export.process(_sprite(), ExportConfig(
+            depth=8, background="magic_pink", palette_source="fixed",
+            fixed_palette=[(0, 0, 0), (200, 30, 30)]))
+
+
+def test_adaptive_palette_prepends_missing_key_at_index_zero():
+    rgb = Image.new("RGB", (4, 4), (200, 30, 30))
+    cfg = ExportConfig(depth=8, palette_source="auto", palette_colors=8)
+    colors = export._resolve_palette(rgb, cfg, (255, 0, 255))
+    assert colors[0] == (255, 0, 255)
+    out = export.process(_sprite(), ExportConfig(
+        depth=8, background="magic_pink", palette_source="auto", palette_colors=8, dither="none"))
+    palette = out.getpalette() or []
+    key_index = next(i for i in range(256) if tuple(palette[i * 3:i * 3 + 3]) == (255, 0, 255))
+    assert out.getpixel((0, 0)) == key_index
+
+
+def test_unknown_palette_suffix_is_rejected():
+    import pytest
+    with pytest.raises(ValueError, match="Palette file must"):
+        export.validate_config(ExportConfig(
+            depth=8, background="magic_pink", palette_source="file", palette_path="scene.xyz"))
+
+
 def test_unsupported_transparency_combination_is_explicit():
     import pytest
     with pytest.raises(ValueError, match="32-bit PNG or TGA"):

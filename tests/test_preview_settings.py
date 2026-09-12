@@ -24,10 +24,11 @@ def test_view_direction_is_independent_of_single_direction_export():
 def test_preview_keeps_source_yaw_loop_mode_and_framing():
     source = RenderSettings(source_yaw=90, loop_mode="oneshot", framing_mode="fixed",
                             framing_scale=3, anchor="feet", output_offset_x=4,
-                            start_direction="N")
+                            start_direction="N", remove_root_motion=True)
     view = preview_settings(source, "W")
     assert view.direction_layout()[0][0] == "W"
     assert view.source_yaw == 90 and source.source_yaw == 90
     assert view.loop_mode == "oneshot" and view.framing_mode == "fixed"
     assert view.anchor == "feet" and view.output_offset_x == 4
+    assert view.remove_root_motion is True and source.remove_root_motion is True
     assert source.start_direction == "N"

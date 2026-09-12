@@ -12,7 +12,7 @@ from framemill.settings import RenderSettings
 @pytest.fixture
 def renderer(monkeypatch):
     sampled = []
-    scene = SimpleNamespace(render=SimpleNamespace(filepath=""))
+    scene = SimpleNamespace(render=SimpleNamespace(filepath=""), frame_current=1)
     scene.frame_set = lambda f, subframe=0: sampled.append(f + subframe)
     bpy = SimpleNamespace(context=SimpleNamespace(scene=scene),
                           ops=SimpleNamespace(render=SimpleNamespace(render=lambda **kw: None)))
@@ -164,3 +164,41 @@ def test_single_override_is_checked_against_detected_range(renderer, tmp_path):
     cfg = RenderSettings(angles=1, anim_start_override=100).render_config()
     with pytest.raises(ValueError, match="Source start"):
         module.render_all("walk.fbx", tmp_path, cfg)
+
+
+def test_remove_root_motion_calls_setup_camera_per_frame(renderer, tmp_path, monkeypatch):
+    module, _ = renderer
+    cameras = []
+    monkeypatch.setattr(module, "setup_camera",
+                        lambda center, size, angle, cfg: cameras.append((center, size)))
+    boxes = [
+        ((0.0, 0.0, 0.0), (1.0, 1.0, 2.0)),
+        ((2.0, 0.0, 0.0), (3.0, 1.0, 2.0)),
+        ((4.0, 0.0, 0.0), (5.0, 1.0, 2.0)),
+        ((6.0, 0.0, 0.0), (7.0, 1.0, 2.0)),
+    ]
+    calls = {"n": 0}
+
+    def fake_bounds(objs):
+        box = boxes[calls["n"] % 4]
+        calls["n"] += 1
+        return box
+
+    monkeypatch.setattr(module, "mesh_bounds", fake_bounds)
+    cfg = RenderSettings(angles=1, frames=4, remove_root_motion=True,
+                         anim_start_override=0, anim_end_override=10).render_config()
+    module.render_all("walk.fbx", tmp_path, cfg)
+    assert len(cameras) == 4
+    assert cameras[0][1] == (1.0, 1.0, 2.0)
+    assert cameras[0][0][0] == 0.5
+    assert cameras[-1][0][0] == 6.5
+    assert cameras[0][0][2] == 1.0
+
+
+def test_root_motion_off_sets_camera_once_per_direction(renderer, tmp_path, monkeypatch):
+    module, _ = renderer
+    cameras = []
+    monkeypatch.setattr(module, "setup_camera", lambda *args: cameras.append(args))
+    cfg = RenderSettings(angles=2, frames=3, remove_root_motion=False).render_config()
+    module.render_all("walk.fbx", tmp_path, cfg)
+    assert len(cameras) == 2

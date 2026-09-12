@@ -174,25 +174,65 @@ def camera_target(center, size, cfg):
     return center
 
 
+def mesh_bounds(objs):
+    lo = [float("inf")] * 3
+    hi = [float("-inf")] * 3
+    for o in objs:
+        if getattr(o, "type", None) != "MESH":
+            continue
+        for corner in o.bound_box:
+            wc = o.matrix_world @ mathutils.Vector(corner)
+            for i in range(3):
+                lo[i] = min(lo[i], wc[i])
+                hi[i] = max(hi[i], wc[i])
+    if lo[0] == float("inf"):
+        return (0.0, 0.0, 0.0), (1.0, 1.0, 1.0)
+    return tuple(lo), tuple(hi)
+
+
 def max_bounds(objs, start, end):
     lo = [float("inf")] * 3
     hi = [float("-inf")] * 3
     orig = bpy.context.scene.frame_current
     for f in range(int(start), int(end) + 1):
         bpy.context.scene.frame_set(f)
-        for o in objs:
-            if o.type != "MESH":
-                continue
-            for corner in o.bound_box:
-                wc = o.matrix_world @ mathutils.Vector(corner)
-                for i in range(3):
-                    lo[i] = min(lo[i], wc[i]); hi[i] = max(hi[i], wc[i])
+        flo, fhi = mesh_bounds(objs)
+        for i in range(3):
+            lo[i] = min(lo[i], flo[i])
+            hi[i] = max(hi[i], fhi[i])
     bpy.context.scene.frame_set(orig)
     if lo[0] == float("inf"):
         return (0, 0, 0), (1, 1, 1)
     center = tuple((lo[i] + hi[i]) / 2 for i in range(3))
     size = tuple(hi[i] - lo[i] for i in range(3))
     return center, size
+
+
+def _size_from_bounds(lo, hi):
+    return (hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2])
+
+
+def _center_from_bounds(lo, hi):
+    return ((lo[0] + hi[0]) / 2.0, (lo[1] + hi[1]) / 2.0, (lo[2] + hi[2]) / 2.0)
+
+
+def _fit_framing_size(per_frame, remove_root_motion):
+    if not per_frame:
+        return (1.0, 1.0, 1.0)
+    if remove_root_motion:
+        sizes = [_size_from_bounds(lo, hi) for lo, hi in per_frame]
+        return tuple(max(s[i] for s in sizes) for i in range(3))
+    ulo = tuple(min(b[0][i] for b in per_frame) for i in range(3))
+    uhi = tuple(max(b[1][i] for b in per_frame) for i in range(3))
+    return _size_from_bounds(ulo, uhi)
+
+
+def _xy_travel(positions):
+    if len(positions) < 2:
+        return 0.0
+    dx = positions[-1][0] - positions[0][0]
+    dy = positions[-1][1] - positions[0][1]
+    return math.hypot(dx, dy)
 
 
 def setup_camera(center, size, angle_deg, cfg):
@@ -327,13 +367,30 @@ def render_all(model, out_dir, cfg, idle=None, preview=False):
             raise ValueError("Source start must be at or before the detected/selected source end.")
         if end - start > 10000:
             raise ValueError("Source range must span at most 10000 frames; trim the source range.")
-        center, size = ref if ref else max_bounds(objs, start, end)
+        remove = bool(cfg.get("remove_root_motion", False))
+        if ref:
+            center, size = ref
+        elif remove:
+            times = [sample_frame(i, start, end) for i in range(max(int(frames), 1))]
+            orig = bpy.context.scene.frame_current
+            sampled = []
+            for af in times:
+                bpy.context.scene.frame_set(math.floor(af), subframe=af % 1.0)
+                sampled.append(mesh_bounds(objs))
+            bpy.context.scene.frame_set(orig)
+            size = _fit_framing_size(sampled, True)
+            center = _center_from_bounds(*sampled[0]) if sampled else (0.0, 0.0, 0.0)
+            travel = _xy_travel([_center_from_bounds(lo, hi) for lo, hi in sampled])
+            log(f"FRAMEMILL: ROOTTRAVEL {travel:.6g}")
+        else:
+            center, size = max_bounds(objs, start, end)
         target = camera_target(center, size, cfg)
         setup_render(cfg, preview)
         counter = render_from.counter
         for name, deg in layout:
-            setup_camera(target, size, deg, cfg)
-            setup_light(target, deg, cfg)
+            if not remove:
+                setup_camera(target, size, deg, cfg)
+                setup_light(target, deg, cfg)
             for fi in frame_indices:
                 if idle_pose:
                     idle_idx = cfg.get("idle_frame_index")
@@ -341,6 +398,13 @@ def render_all(model, out_dir, cfg, idle=None, preview=False):
                 else:
                     af = sample_frame(fi, start, end)
                 bpy.context.scene.frame_set(math.floor(af), subframe=af % 1.0)
+                if remove:
+                    flo, fhi = mesh_bounds(objs)
+                    fcenter = _center_from_bounds(flo, fhi)
+                    aimed = camera_target(fcenter, _size_from_bounds(flo, fhi), cfg)
+                    per_target = (fcenter[0], fcenter[1], aimed[2])
+                    setup_camera(per_target, size, deg, cfg)
+                    setup_light(per_target, deg, cfg)
                 bpy.context.scene.render.filepath = os.path.join(out_dir, f"{name}_{fi:02d}.png")
                 bpy.ops.render.render(write_still=True)
                 counter += 1

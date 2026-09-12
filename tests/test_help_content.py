@@ -14,6 +14,11 @@ def test_search_empty_and_keywords():
     assert pink and pink[0].id in {"exporting", "ref-export"}
     orbit = help_content.search("orbit distance")
     assert orbit and orbit[0].id in {"camera-framing", "ref-appearance"}
+    master = help_content.search("master palette")
+    assert master and master[0].id == "dos-master-palette"
+    assert help_content.search("dos palette")
+    assert help_content.search("index 0")
+    assert help_content.search("remove root motion")
 
 
 def test_title_ranks_above_body_only():

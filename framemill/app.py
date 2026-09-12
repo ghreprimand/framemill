@@ -107,6 +107,7 @@ def main(page: ft.Page) -> None:
         "look", "exposure", "gamma", "specular_ior", "source_yaw", "loop_mode",
         "phase_offset", "reverse", "anim_start_override", "anim_end_override",
         "frames", "frame_width", "frame_height", "samples", "engine",
+        "remove_root_motion",
     }
     detected = {"frame_start": None, "frame_end": None, "fps": None,
                 "action": None, "duration_frames": None}
@@ -489,6 +490,12 @@ def main(page: ft.Page) -> None:
                     else text("Phase is ignored for one-shot clips.", 11, MUTED),
                     ft.Switch(label="Reverse playback", value=settings.reverse, active_color=ACCENT,
                               on_change=lambda e: change("reverse", e.control.value)),
+                    ft.Switch(label="Remove root motion (re-center each frame)",
+                              value=settings.remove_root_motion, active_color=ACCENT,
+                              on_change=lambda e: change("remove_root_motion", e.control.value)),
+                    text("For animations that travel across the ground. Keeps the character centered "
+                         "in every frame. Not needed if your source is already in-place "
+                         "(for example Mixamo In Place).", 11, MUTED),
                     text("Loop wraps and skips the final endpoint so a walk cycle does not repeat its first pose. "
                          "One-shot includes both endpoints when there are two or more frames; "
                          "a single frame is the start pose (or the end pose if reversed). "
@@ -1166,7 +1173,8 @@ def main(page: ft.Page) -> None:
                 page.update()
                 return
             files = await picker.pick_files(file_type=ft.FilePickerFileType.CUSTOM,
-                                            allowed_extensions=["pal", "gpl", "hex", "txt"])
+                                            allowed_extensions=["pal", "gpl", "hex", "txt",
+                                                                "bmp", "png", "gif"])
             if files and files[0].path:
                 draft.palette_path = files[0].path
                 palette_note.value = files[0].name
@@ -1234,7 +1242,9 @@ def main(page: ft.Page) -> None:
                          [("none", "None · clean colours"), ("ordered", "Ordered · Bayer"), ("floyd", "Floyd-Steinberg")],
                          lambda v: change_export("dither", v), disabled=not indexed),
                 dropdown("Palette", draft.palette_source,
-                         [("auto", "Adaptive · from this sheet"), ("file", "Load a palette file"), ("fixed", "Custom fixed colours")],
+                         [("auto", "Adaptive · from this sheet"),
+                          ("file", "Master palette (share a scene palette)"),
+                          ("fixed", "Custom fixed colours")],
                          lambda v: change_export("palette_source", v, True), disabled=not indexed),
             ]
             if indexed and draft.palette_source == "auto":
@@ -1242,8 +1252,12 @@ def main(page: ft.Page) -> None:
                     [(n, str(n)) for n in sorted({2, 4, 8, 16, 32, 64, 128, 256, draft.palette_colors})],
                     lambda v: change_export("palette_colors", int(v))))
             if indexed and draft.palette_source == "file":
-                export_controls.controls += [button("Load .pal / .gpl / .hex", ft.Icons.FOLDER_OPEN,
-                                                     lambda e: page.run_task(choose_palette)),
+                export_controls.controls += [
+                    text("For DOS: load the scene's master palette (for example BG_00.BMP) so this "
+                         "sheet shares the scene's global 256-colour palette. Transparent pixels "
+                         "use the palette's magic-pink index.", 11, MUTED),
+                    button("Load palette (BMP / PNG / PAL / GPL / HEX)", ft.Icons.FOLDER_OPEN,
+                           lambda e: page.run_task(choose_palette)),
                     field("Palette path", draft.palette_path or "", lambda e: change_export("palette_path", e.control.value)),
                     palette_note]
             if indexed and draft.palette_source == "fixed":

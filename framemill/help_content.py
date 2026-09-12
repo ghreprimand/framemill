@@ -158,7 +158,7 @@ ARTICLES: list[Article] = [
             ("h", "Pick an animation"),
             ("li", [
                 "Choose a motion, for example Walking, Idle, or an attack.",
-                "For anything the game moves across the ground, turn In Place on. framemill does not remove root motion, so an in-place cycle keeps the character centered in every frame.",
+                "For anything the game moves across the ground, turn In Place on. If a clip still travels, turn on Remove root motion in Layout & timing so each frame is re-centered.",
             ]),
             ("h", "Download with the settings framemill needs"),
             ("li", [
@@ -175,7 +175,7 @@ ARTICLES: list[Article] = [
             ("link", "Mixamo rigging and animation guide",
              "https://helpx.adobe.com/creative-cloud/help/mixamo-rigging-animation.html"),
         ],
-        ("mixamo", "with skin", "in place", "fbx binary", "keyframe reduction", "t-pose"),
+        ("mixamo", "with skin", "in place", "fbx binary", "keyframe reduction", "t-pose", "root motion"),
     ),
     Article(
         "first-sheet", "Your first sheet", "getting-started",
@@ -212,7 +212,8 @@ ARTICLES: list[Article] = [
                 "Set the same world-unit origin (usually the character root at 0, 0, 0) and the same output offsets for every sheet.",
             ]),
             ("p", _t(
-                "Fit mode sizes each clip to its own bounds and will shift between clips whose poses differ.",
+                "Fit mode sizes each clip to its own bounds and will shift between clips whose poses differ. ",
+                "If a walk still travels, turn on Remove root motion so Fit sizes the character, not the travel box.",
             )),
         ],
         ("fixed world scale", "origin", "related sheets"),
@@ -487,8 +488,15 @@ ARTICLES: list[Article] = [
             )),
             ("h", guide.ANIMATION_STEPS[3].title),
             ("p", guide.ANIMATION_STEPS[3].body),
+            ("h", "Remove root motion"),
+            ("p", _t(
+                "Turn on Remove root motion (re-center each frame) when the source travels ",
+                "across the ground. Fit mode then sizes the character from the largest single ",
+                "frame, not the whole-clip travel box, and the camera recenters on each frame. ",
+                "Leave it off if the source is already in-place (for example Mixamo In Place).",
+            )),
         ],
-        ("loop", "oneshot", "one-shot", "phase", "reverse", "playback_fps"),
+        ("loop", "oneshot", "one-shot", "phase", "reverse", "playback_fps", "root motion"),
     ),
     Article(
         "first-frame-replacement", "First-frame replacement (advanced)", "layout",
@@ -559,10 +567,10 @@ ARTICLES: list[Article] = [
                 "silhouette. It is not cell padding and not dithering.",
             )),
             ("p", _t(
-                "Adaptive palettes can vary across sheets. Use a shared palette for related ",
-                "animations. If the key colour is absent, Framemill prepends it and truncates to ",
-                "256 entries, which can change palette indices. Verify the result against your ",
-                "engine's exact index requirements.",
+                "Adaptive palettes can vary across sheets. Use Master palette to share a scene ",
+                "palette (an indexed BMP is fine). Adaptive still puts a missing magic-pink key ",
+                "at index 0. A supplied master palette keeps its exact index order and errors ",
+                "if the key colour is absent.",
             )),
             ("h", "Metadata sidecar"),
             ("p", _t(
@@ -576,7 +584,31 @@ ARTICLES: list[Article] = [
                 "controls, or BMP output.",
             )),
         ],
-        ("magic pink", "dithering", "palette", "sidecar", "tga", "bmp"),
+        ("magic pink", "dithering", "palette", "sidecar", "tga", "bmp", "master palette"),
+    ),
+    Article(
+        "dos-master-palette", "DOS master palette", "export",
+        [
+            ("p", _t(
+                "DOS and Allegro 8-bit games use one shared 256-colour palette per scene. ",
+                "The character sheet must be quantized to that same master palette as the ",
+                "background. Index 0 is the transparent key (magic pink 255, 0, 255 in the ",
+                "real assets).",
+            )),
+            ("p", "How to export a sheet that matches a scene:"),
+            ("li", [
+                "Export as BMP, 8-bit, Background = Magic pink.",
+                "Set Palette to Master palette (share a scene palette).",
+                "Load the scene BMP (for example BG_00.BMP). The embedded palette is used in exact index order.",
+                "Sheet Direction order should match the engine (often First direction S, Rotation counter-clockwise).",
+            ]),
+            ("p", _t(
+                "A supplied master palette is never reordered. If magic pink is missing, export ",
+                "stops with an error instead of inserting it at index 0 (that would shift every ",
+                "other colour). Adaptive palettes still place a missing key at index 0.",
+            )),
+        ],
+        ("master palette", "dos palette", "index 0", "allegro", "bg_00"),
     ),
     Article(
         "direction-orientation", "South, sheet order and yaw", "orientation",
@@ -1159,6 +1191,14 @@ ARTICLES: list[Article] = [
             gotcha="This is sampling order, not an in-engine playback flag. Metadata records loop_mode separately.",
         )
         + _ctl(
+            "Remove root motion (re-center each frame)",
+            "Keep a travelling clip framed at character size instead of the whole-clip travel box.",
+            options="On or off",
+            default="Off",
+            effect="Fit uses the largest single-frame extent. The camera recenters on each frame (XY from that frame, Z from the shared target).",
+            gotcha="Leave off for in-place cycles. When an idle replacement is set, idle uses the walk clip's fitted size.",
+        )
+        + _ctl(
             "Choose replacement model",
             "Optional second model that replaces cell 01 in each direction.",
             options="Same formats as the main source; clear with the close icon",
@@ -1167,7 +1207,7 @@ ARTICLES: list[Article] = [
             gotcha="No blending. Scale, origin, and orientation must match. Not an idle-sheet generator. CLI: --idle.",
         ),
         ("phase", "source start", "source facing", "first direction", "reverse playback",
-         "first-frame replacement"),
+         "first-frame replacement", "root motion"),
     ),
     Article(
         "ref-export", "Export dialog controls", "reference",
@@ -1254,10 +1294,10 @@ ARTICLES: list[Article] = [
         + _ctl(
             "Palette",
             "Where the 8-bit palette comes from.",
-            options="Adaptive (from this sheet), Load a palette file, Custom fixed colours",
+            options="Adaptive (from this sheet), Master palette (share a scene palette), Custom fixed colours",
             default="Adaptive",
             effect="Chooses the index table.",
-            gotcha="Adaptive palettes can differ between sheets. Use a shared file or fixed list for related clips.",
+            gotcha="Master palette keeps exact index order. Adaptive may put a missing magic-pink key at index 0.",
         )
         + _ctl(
             "Maximum colours",
@@ -1265,15 +1305,15 @@ ARTICLES: list[Article] = [
             options="2 to 256",
             default="256",
             effect="Fewer colours, smaller unique set.",
-            gotcha="Visible only for adaptive 8-bit. Prepending a missing key colour can truncate to 256 and shift indices.",
+            gotcha="Visible only for adaptive 8-bit. Adaptive still prepends a missing key at index 0 and may truncate to 256.",
         )
         + _ctl(
-            "Load .pal / .gpl / .hex and Palette path",
-            "Supply a palette file for indexed output.",
-            options=".pal, .gpl, .hex; path field",
+            "Load palette (BMP / PNG / PAL / GPL / HEX) and Palette path",
+            "Supply a master palette for indexed output.",
+            options="Indexed .bmp/.png/.gif, or .pal/.gpl/.hex/.txt; path field",
             default="Empty",
-            effect="Uses that palette instead of an adaptive one.",
-            gotcha="Visible only when Palette is File. Paths in recipes are stored relative when possible.",
+            effect="Uses that palette in exact index order. Transparent pixels map to the magic-pink index.",
+            gotcha="Visible only when Palette is Master palette. A truecolour image is rejected. Missing magic pink is an error.",
         )
         + _ctl(
             "Fixed colours · #RRGGBB",
@@ -1281,7 +1321,7 @@ ARTICLES: list[Article] = [
             options="#RRGGBB tokens",
             default="Empty",
             effect="Exact index list for engines that require it.",
-            gotcha="Visible only when Palette is Fixed. Adding a missing key colour can shift indices.",
+            gotcha="Visible only when Palette is Fixed. A missing key colour is an error; the list is not reordered.",
         )
         + _ctl(
             "Write JSON sidecar",
@@ -1345,7 +1385,8 @@ CONTROL_KEYWORDS: tuple[str, ...] = (
     "orbit distance", "edge bleed", "magic pink", "fit multiplier", "specular ior",
     "phase", "anchor", "output preset", "write json sidecar", "recenter", "base size",
     "locate blender", "choose a model", "elevation", "source start", "first direction",
-    "alpha cutoff", "viewer fps", "reset to defaults",
+    "alpha cutoff", "viewer fps", "reset to defaults", "master palette",
+    "remove root motion",
 )
 
 
