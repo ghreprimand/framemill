@@ -125,9 +125,9 @@ Every release also attaches the **wheel** and **sdist** to the
 [releases page](https://github.com/ghreprimand/framemill/releases). To pin a version:
 
 ```bash
-pipx install framemill==0.1.2
+pipx install framemill==0.1.3
 # or install a downloaded wheel directly:
-pipx install ./framemill-0.1.2-py3-none-any.whl
+pipx install ./framemill-0.1.3-py3-none-any.whl
 ```
 
 ---
